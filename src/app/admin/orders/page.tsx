@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLocale } from "@/components/locale-provider";
 
 type OrderItem = {
   id: string;
@@ -21,11 +22,18 @@ type Order = {
   items: OrderItem[];
 };
 
-const STATUSES = ["PENDING", "CONFIRMED", "CANCELLED"];
+const STATUSES = ["PENDING", "CONFIRMED", "CANCELLED"] as const;
 
 export default function AdminOrdersPage() {
+  const { t } = useLocale();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const statusLabels: Record<(typeof STATUSES)[number], string> = {
+    PENDING: t("admin.orders.statusPending"),
+    CONFIRMED: t("admin.orders.statusConfirmed"),
+    CANCELLED: t("admin.orders.statusCancelled"),
+  };
 
   async function loadOrders() {
     setLoading(true);
@@ -50,16 +58,18 @@ export default function AdminOrdersPage() {
   if (loading) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-4">
-        <p className="text-sm text-stone-500">Loading...</p>
+        <p className="text-sm text-stone-500">{t("admin.orders.loading")}</p>
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-4 space-y-4">
-      <h1 className="text-xl font-bold text-stone-900">Orders</h1>
+      <h1 className="text-xl font-bold text-stone-900">{t("admin.orders.title")}</h1>
 
-      {orders.length === 0 && <p className="text-sm text-stone-500">No orders yet.</p>}
+      {orders.length === 0 && (
+        <p className="text-sm text-stone-500">{t("admin.orders.noOrdersYet")}</p>
+      )}
 
       <ul className="space-y-4">
         {orders.map((order) => {
@@ -83,7 +93,7 @@ export default function AdminOrdersPage() {
                 >
                   {STATUSES.map((status) => (
                     <option key={status} value={status}>
-                      {status}
+                      {statusLabels[status]}
                     </option>
                   ))}
                 </select>
@@ -92,7 +102,11 @@ export default function AdminOrdersPage() {
               <ul className="mt-3 text-sm text-stone-700 space-y-1">
                 {order.items.map((item) => (
                   <li key={item.id}>
-                    {item.quantity}x {item.product.name} (${item.price.toFixed(2)} each)
+                    {t("admin.orders.itemLine", {
+                      qty: item.quantity,
+                      name: item.product.name,
+                      price: item.price.toFixed(2),
+                    })}
                   </li>
                 ))}
               </ul>
@@ -100,16 +114,23 @@ export default function AdminOrdersPage() {
               {order.couponCode && (
                 <div className="mt-3 flex items-center justify-between text-sm text-green-700">
                   <span>
-                    Coupon {order.couponCode} (-{order.discountPercent}%)
+                    {t("admin.orders.couponLine", {
+                      code: order.couponCode,
+                      percent: order.discountPercent ?? 0,
+                    })}
                   </span>
                   <span>-${discountAmount.toFixed(2)}</span>
                 </div>
               )}
 
               <div className="mt-3 flex items-center justify-between text-sm">
-                <span className="font-medium">Total: ${total.toFixed(2)}</span>
+                <span className="font-medium">
+                  {t("admin.orders.total", { amount: total.toFixed(2) })}
+                </span>
                 <span className={order.whatsappSentAt ? "text-green-700" : "text-amber-700"}>
-                  {order.whatsappSentAt ? "WhatsApp sent" : "WhatsApp not sent"}
+                  {order.whatsappSentAt
+                    ? t("admin.orders.whatsappSent")
+                    : t("admin.orders.whatsappNotSent")}
                 </span>
               </div>
             </li>

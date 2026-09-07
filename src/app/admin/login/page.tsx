@@ -4,8 +4,11 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { useLocale } from "@/components/locale-provider";
 
 export default function AdminLoginPage() {
+  const { t } = useLocale();
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -25,7 +28,7 @@ export default function AdminLoginPage() {
 
     setSubmitting(false);
     if (res?.error) {
-      setError("Invalid username or password.");
+      setError(t("admin.login.invalid"));
       return;
     }
     router.push("/admin");
@@ -35,22 +38,23 @@ export default function AdminLoginPage() {
   return (
     <div className="min-h-screen bg-stone-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <div className="flex justify-center mb-6">
+        <div className="flex items-center justify-between gap-3 mb-6">
           <BrandLogo />
+          <LanguageSwitcher />
         </div>
         <div className="bg-white border border-stone-200 rounded-lg p-6">
-          <h1 className="text-lg font-bold text-stone-900 mb-4">Admin login</h1>
+          <h1 className="text-lg font-bold text-stone-900 mb-4">{t("admin.login.title")}</h1>
           <form onSubmit={handleSubmit} className="space-y-3">
             <input
               type="text"
-              placeholder="Username"
+              placeholder={t("admin.login.username")}
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full border border-stone-300 rounded px-3 py-2"
             />
             <input
               type="password"
-              placeholder="Password"
+              placeholder={t("admin.login.password")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full border border-stone-300 rounded px-3 py-2"
@@ -60,7 +64,7 @@ export default function AdminLoginPage() {
               disabled={submitting}
               className="w-full bg-amber-600 text-white rounded px-4 py-2 font-semibold disabled:opacity-50"
             >
-              {submitting ? "Signing in..." : "Sign in"}
+              {submitting ? t("admin.login.signingIn") : t("admin.login.signIn")}
             </button>
             {error && <p className="text-sm text-red-600">{error}</p>}
           </form>

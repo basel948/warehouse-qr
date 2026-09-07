@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { useLocale } from "@/components/locale-provider";
 
 type Category = {
   id: string;
@@ -29,6 +31,7 @@ type Section = {
 const UNCATEGORIZED_KEY = "__uncategorized";
 
 export function OrderCatalog({ products }: { products: Product[] }) {
+  const { t } = useLocale();
   const [cart, setCart] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState<string>("all");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
@@ -39,14 +42,14 @@ export function OrderCatalog({ products }: { products: Product[] }) {
 
     for (const product of products) {
       const key = product.category?.id ?? UNCATEGORIZED_KEY;
-      const name = product.category?.name ?? "Other";
+      const name = product.category?.name ?? t("catalog.otherCategory");
       const order = product.category?.order ?? Number.MAX_SAFE_INTEGER;
       if (!byKey.has(key)) byKey.set(key, { key, name, order, products: [] });
       byKey.get(key)!.products.push(product);
     }
 
     return Array.from(byKey.values()).sort((a, b) => a.order - b.order);
-  }, [products]);
+  }, [products, t]);
 
   const isSearching = searchQuery.trim().length > 0;
 
@@ -83,24 +86,27 @@ export function OrderCatalog({ products }: { products: Product[] }) {
       <header className="sticky top-0 z-10 bg-white border-b border-stone-200">
         <div className="h-1.5 bg-amber-600" aria-hidden />
         <div className="px-4 pt-3 pb-3">
-          <BrandLogo />
-          <div className="relative mt-3">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" aria-hidden>
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <BrandLogo />
+            <LanguageSwitcher />
+          </div>
+          <div className="relative">
+            <span className="absolute start-3 top-1/2 -translate-y-1/2 text-stone-400" aria-hidden>
               🔍
             </span>
             <input
               type="search"
-              placeholder="Search products..."
+              placeholder={t("catalog.searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full border border-stone-300 rounded-lg pl-9 pr-3 py-2 text-sm bg-white"
+              className="w-full border border-stone-300 rounded-lg ps-9 pe-3 py-2 text-sm bg-white"
             />
           </div>
         </div>
         {!isSearching && (
           <div className="flex gap-2 overflow-x-auto px-4 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <TabButton active={activeTab === "all"} onClick={() => setActiveTab("all")}>
-              All
+              {t("catalog.all")}
             </TabButton>
             {sections.map((section) => (
               <TabButton
@@ -131,7 +137,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
             </div>
             {searchResults.length === 0 && (
               <p className="text-sm text-stone-500 py-8 text-center">
-                No products match &ldquo;{searchQuery}&rdquo;.
+                {t("catalog.noProductsMatch", { query: searchQuery })}
               </p>
             )}
           </>
@@ -160,7 +166,9 @@ export function OrderCatalog({ products }: { products: Product[] }) {
             ))}
 
             {visibleSections.every((s) => s.products.length === 0) && (
-              <p className="text-sm text-stone-500 py-8 text-center">No products in this category.</p>
+              <p className="text-sm text-stone-500 py-8 text-center">
+                {t("catalog.noProductsInCategory")}
+              </p>
             )}
           </>
         )}
@@ -172,9 +180,13 @@ export function OrderCatalog({ products }: { products: Product[] }) {
           className="fixed bottom-0 inset-x-0 z-20 bg-stone-900 text-white px-4 py-4 flex items-center justify-between font-semibold shadow-lg"
         >
           <span>
-            {cartCount} item{cartCount > 1 ? "s" : ""}
+            {cartCount === 1
+              ? t("catalog.cartItemsOne")
+              : t("catalog.cartItemsOther", { count: cartCount })}
           </span>
-          <span className="text-amber-400">${cartTotal.toFixed(2)} · Checkout</span>
+          <span className="text-amber-400">
+            ${cartTotal.toFixed(2)} · {t("catalog.checkout")}
+          </span>
         </button>
       )}
 
@@ -228,6 +240,8 @@ function ProductCard({
   onAdd: () => void;
   onSetQuantity: (quantity: number) => void;
 }) {
+  const { t } = useLocale();
+
   return (
     <div className="border border-stone-200 rounded-lg overflow-hidden flex flex-col bg-white">
       <div className="aspect-square bg-stone-100 flex items-center justify-center">
@@ -252,13 +266,15 @@ function ProductCard({
         <p className="text-sm font-bold text-stone-900">${product.price.toFixed(2)}</p>
 
         {!product.inStock ? (
-          <p className="mt-auto text-[10px] font-semibold text-red-600 py-1.5">Out of stock</p>
+          <p className="mt-auto text-[10px] font-semibold text-red-600 py-1.5">
+            {t("catalog.outOfStock")}
+          </p>
         ) : quantity === 0 ? (
           <button
             onClick={onAdd}
             className="mt-auto bg-amber-600 text-white text-xs font-semibold rounded-md py-1.5"
           >
-            Add to cart
+            {t("catalog.addToCart")}
           </button>
         ) : (
           <div className="mt-auto flex items-center justify-between bg-stone-900 rounded-md text-white">
@@ -299,6 +315,7 @@ function CheckoutSheet({
   onClose: () => void;
   onOrdered: () => void;
 }) {
+  const { t } = useLocale();
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [couponInput, setCouponInput] = useState("");
@@ -323,7 +340,7 @@ function CheckoutSheet({
   async function applyCoupon() {
     setCouponError(null);
     if (!couponInput.trim()) {
-      setCouponError("Enter a coupon code.");
+      setCouponError(t("checkout.couponErrorEmpty"));
       return;
     }
 
@@ -337,12 +354,12 @@ function CheckoutSheet({
       const data = await res.json();
       if (!res.ok) {
         setAppliedCoupon(null);
-        setCouponError(data.error ?? "Invalid coupon code.");
+        setCouponError(t("checkout.couponErrorInvalid"));
         return;
       }
       setAppliedCoupon({ code: data.code, discountPercent: data.discountPercent });
     } catch {
-      setCouponError("Network error validating coupon.");
+      setCouponError(t("checkout.couponErrorNetwork"));
     } finally {
       setValidatingCoupon(false);
     }
@@ -358,7 +375,7 @@ function CheckoutSheet({
     setError(null);
 
     if (!customerName.trim() || !customerPhone.trim()) {
-      setError("Enter your name and phone number.");
+      setError(t("checkout.errorMissingInfo"));
       return;
     }
 
@@ -380,7 +397,7 @@ function CheckoutSheet({
 
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Failed to place order.");
+        setError(t("checkout.errorFailed"));
         return;
       }
 
@@ -390,7 +407,7 @@ function CheckoutSheet({
         couponCode: data.order.couponCode,
       });
     } catch {
-      setError("Network error placing order.");
+      setError(t("checkout.errorNetwork"));
     } finally {
       setSubmitting(false);
     }
@@ -402,31 +419,34 @@ function CheckoutSheet({
         {success ? (
           <div className="p-6 text-center space-y-3">
             <p className="text-2xl">✅</p>
-            <p className="font-semibold text-stone-900">Order placed!</p>
+            <p className="font-semibold text-stone-900">{t("checkout.successTitle")}</p>
             {success.couponCode && (
               <p className="text-sm text-green-700 font-medium">
-                Coupon {success.couponCode} saved you ${success.discountAmount.toFixed(2)}
+                {t("checkout.successCouponSaved", {
+                  code: success.couponCode,
+                  amount: success.discountAmount.toFixed(2),
+                })}
               </p>
             )}
             <p className="text-sm text-stone-600">
               {success.whatsappError
-                ? "The warehouse will be notified shortly."
-                : "The warehouse has been notified via WhatsApp."}
+                ? t("checkout.whatsappPending")
+                : t("checkout.whatsappSent")}
             </p>
             <button
               onClick={onOrdered}
               className="w-full bg-amber-600 text-white rounded-lg py-3 font-semibold mt-4"
             >
-              Done
+              {t("checkout.done")}
             </button>
           </div>
         ) : (
           <div className="p-4">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-stone-900">Your order</h2>
+              <h2 className="text-lg font-bold text-stone-900">{t("checkout.title")}</h2>
               <button
                 onClick={onClose}
-                aria-label="Close"
+                aria-label={t("checkout.close")}
                 className="w-8 h-8 text-xl text-stone-500"
               >
                 ×
@@ -450,20 +470,23 @@ function CheckoutSheet({
               {appliedCoupon ? (
                 <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
                   <span className="text-sm font-semibold text-green-700">
-                    {appliedCoupon.code} applied · -{appliedCoupon.discountPercent}%
+                    {t("checkout.couponApplied", {
+                      code: appliedCoupon.code,
+                      percent: appliedCoupon.discountPercent,
+                    })}
                   </span>
                   <button
                     onClick={removeCoupon}
                     className="text-sm text-green-700 underline"
                   >
-                    Remove
+                    {t("checkout.remove")}
                   </button>
                 </div>
               ) : (
                 <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder="Coupon code"
+                    placeholder={t("checkout.couponPlaceholder")}
                     value={couponInput}
                     onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                     className="flex-1 border border-stone-300 rounded-lg px-3 py-2 uppercase"
@@ -473,7 +496,7 @@ function CheckoutSheet({
                     disabled={validatingCoupon}
                     className="shrink-0 border border-stone-900 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
                   >
-                    {validatingCoupon ? "Checking..." : "Apply"}
+                    {validatingCoupon ? t("checkout.checking") : t("checkout.apply")}
                   </button>
                 </div>
               )}
@@ -484,17 +507,17 @@ function CheckoutSheet({
               {appliedCoupon && (
                 <>
                   <div className="flex items-center justify-between text-sm text-stone-600">
-                    <span>Subtotal</span>
+                    <span>{t("checkout.subtotal")}</span>
                     <span>${subtotal.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm text-green-700">
-                    <span>Discount ({appliedCoupon.discountPercent}%)</span>
+                    <span>{t("checkout.discount", { percent: appliedCoupon.discountPercent })}</span>
                     <span>-${discountAmount.toFixed(2)}</span>
                   </div>
                 </>
               )}
               <div className="flex items-center justify-between font-bold text-stone-900">
-                <span>Total</span>
+                <span>{t("checkout.total")}</span>
                 <span>${total.toFixed(2)}</span>
               </div>
             </div>
@@ -502,14 +525,14 @@ function CheckoutSheet({
             <div className="space-y-2 mb-4">
               <input
                 type="text"
-                placeholder="Your name"
+                placeholder={t("checkout.namePlaceholder")}
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
                 className="w-full border border-stone-300 rounded-lg px-3 py-3"
               />
               <input
                 type="tel"
-                placeholder="Your phone number"
+                placeholder={t("checkout.phonePlaceholder")}
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 className="w-full border border-stone-300 rounded-lg px-3 py-3"
@@ -521,7 +544,7 @@ function CheckoutSheet({
               disabled={submitting}
               className="w-full bg-amber-600 text-white rounded-lg py-3 font-semibold disabled:opacity-50"
             >
-              {submitting ? "Placing order..." : "Place order"}
+              {submitting ? t("checkout.placingOrder") : t("checkout.placeOrder")}
             </button>
             {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLocale } from "@/components/locale-provider";
 
 type Coupon = {
   id: string;
@@ -11,6 +12,7 @@ type Coupon = {
 };
 
 export default function AdminCouponsPage() {
+  const { t } = useLocale();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -35,11 +37,11 @@ export default function AdminCouponsPage() {
 
     const parsedPercent = Number(discountPercent);
     if (!code.trim()) {
-      setError("Enter a coupon code.");
+      setError(t("admin.coupons.emptyCodeError"));
       return;
     }
     if (!Number.isInteger(parsedPercent) || parsedPercent < 1 || parsedPercent > 100) {
-      setError("Enter a discount percent between 1 and 100.");
+      setError(t("admin.coupons.invalidPercentError"));
       return;
     }
 
@@ -50,8 +52,7 @@ export default function AdminCouponsPage() {
     });
 
     if (!res.ok) {
-      const data = await res.json().catch(() => null);
-      setError(data?.error ?? "Failed to add coupon.");
+      setError(t("admin.coupons.addFailedError"));
       return;
     }
 
@@ -77,13 +78,13 @@ export default function AdminCouponsPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 py-4 space-y-8">
       <div>
-        <h1 className="text-xl font-bold text-stone-900 mb-4">Coupons</h1>
+        <h1 className="text-xl font-bold text-stone-900 mb-4">{t("admin.coupons.title")}</h1>
 
         <form onSubmit={addCoupon} className="bg-white border border-stone-200 rounded-lg p-4 space-y-2 mb-6">
           <div className="flex gap-2">
             <input
               type="text"
-              placeholder="Code (e.g. SAVE10)"
+              placeholder={t("admin.coupons.codePlaceholder")}
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
               className="flex-1 border border-stone-300 rounded px-3 py-2 uppercase"
@@ -99,22 +100,24 @@ export default function AdminCouponsPage() {
             </select>
           </div>
           <button type="submit" className="bg-amber-600 text-white rounded px-4 py-2">
-            Add coupon
+            {t("admin.coupons.addCoupon")}
           </button>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </form>
 
         {loading ? (
-          <p className="text-sm text-stone-500">Loading...</p>
+          <p className="text-sm text-stone-500">{t("admin.coupons.loading")}</p>
         ) : coupons.length === 0 ? (
-          <p className="text-sm text-stone-500">No coupons yet.</p>
+          <p className="text-sm text-stone-500">{t("admin.coupons.noCouponsYet")}</p>
         ) : (
           <ul className="divide-y divide-stone-200 bg-white border border-stone-200 rounded-lg overflow-hidden">
             {coupons.map((coupon) => (
               <li key={coupon.id} className="flex items-center justify-between gap-4 p-4">
                 <div>
                   <p className="font-mono font-medium">{coupon.code}</p>
-                  <p className="text-sm text-stone-500">{coupon.discountPercent}% off</p>
+                  <p className="text-sm text-stone-500">
+                    {t("admin.coupons.percentOff", { percent: coupon.discountPercent })}
+                  </p>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span
@@ -122,19 +125,19 @@ export default function AdminCouponsPage() {
                       coupon.active ? "bg-green-100 text-green-700" : "bg-stone-100 text-stone-500"
                     }`}
                   >
-                    {coupon.active ? "Active" : "Inactive"}
+                    {coupon.active ? t("admin.coupons.active") : t("admin.coupons.inactive")}
                   </span>
                   <button
                     onClick={() => toggleActive(coupon)}
                     className="text-sm text-stone-600 underline"
                   >
-                    {coupon.active ? "Deactivate" : "Activate"}
+                    {coupon.active ? t("admin.coupons.deactivate") : t("admin.coupons.activate")}
                   </button>
                   <button
                     onClick={() => deleteCoupon(coupon.id)}
                     className="text-sm text-red-600 underline"
                   >
-                    Delete
+                    {t("admin.coupons.delete")}
                   </button>
                 </div>
               </li>

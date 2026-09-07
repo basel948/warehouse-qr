@@ -88,6 +88,35 @@ than a central theme file; `globals.css` fixes the page background to light — 
 `prefers-color-scheme: dark` override there, since that previously made the site go black for any
 visitor with OS-level dark mode on.
 
+**i18n (Hebrew/Arabic, both RTL)**: no third-party i18n library — a lightweight custom setup under
+`src/lib/i18n/`. `locales.ts` defines the two supported locales (both RTL; there's no LTR locale
+yet, so `dir` is always `"rtl"` today, but code reads `LOCALE_DIR[locale]` rather than hardcoding
+that). `dictionaries.ts` holds plain nested-object translations for fixed UI copy only — product
+names/descriptions and admin-created category/coupon names are intentionally left untranslated
+(single language, per-product translations are a future feature). `get-locale.ts` is
+server-only (reads the `locale` cookie via `next/headers`); `cookie.ts` just holds the cookie
+name constant so client code (`locale-provider.tsx`) can read/write the cookie without pulling in
+`next/headers` (that import fails outside Server Components — keep it out of anything client-side).
+
+The root layout (`src/app/layout.tsx`) reads the cookie once, sets `<html lang dir>` accordingly
+(defaults to `he`/`rtl` with no cookie), and seeds the client `LocaleProvider` with that same
+value so SSR and first client render agree (no hydration mismatch, no flash of wrong direction).
+Everything else reads translations via the `useLocale()` hook (`t()`, dot-path keys, `{param}`
+interpolation) — client components only. The one exception is `/admin` (`page.tsx`), which stays
+a Server Component for its Prisma/QR-code data fetching and delegates all rendering to a client
+`DashboardContent` component so it can use `useLocale()` too; follow that split (fetch server-side,
+render + translate client-side) rather than reading the cookie again in more Server Components.
+
+`setLocale()` in `locale-provider.tsx` updates React state, writes `document.documentElement`
+`lang`/`dir` immediately (instant UI flip, no reload), sets the cookie, and calls
+`router.refresh()` so any Server Component data on the page re-renders consistently.
+
+RTL layout mirroring relies on two things: (1) CSS flexbox/grid `justify-between` etc. already
+mirror automatically under `dir="rtl"` — most of the app needed no changes; (2) directional
+Tailwind utilities were converted to logical ones (`ps-`/`pe-` not `pl-`/`pr-`, `ms-`/`me-` not
+`ml-`/`mr-`, `start-`/`end-` not `left-`/`right-`). When adding new UI, use the logical utilities
+from the start rather than physical left/right ones, or RTL will silently break for that spot.
+
 ## Environment
 
 See `.env.example` for the full list. Required to actually deliver WhatsApp notifications:
