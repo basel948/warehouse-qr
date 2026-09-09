@@ -119,7 +119,7 @@ export default function AdminOrdersPage() {
                       percent: order.discountPercent ?? 0,
                     })}
                   </span>
-                  <span>-${discountAmount.toFixed(2)}</span>
+                  <span>-₪{discountAmount.toFixed(2)}</span>
                 </div>
               )}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
@@ -185,7 +185,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
               : t("catalog.cartItemsOther", { count: cartCount })}
           </span>
           <span className="text-amber-400">
-            ${cartTotal.toFixed(2)} · {t("catalog.checkout")}
+            ₪{cartTotal.toFixed(2)} · {t("catalog.checkout")}
           </span>
         </button>
       )}
@@ -241,6 +241,18 @@ function ProductCard({
   onSetQuantity: (quantity: number) => void;
 }) {
   const { t } = useLocale();
+  const [quantityInput, setQuantityInput] = useState(String(quantity));
+
+  useEffect(() => {
+    setQuantityInput(String(quantity));
+  }, [quantity]);
+
+  function commitQuantityInput() {
+    const parsed = parseInt(quantityInput, 10);
+    const clamped = Number.isNaN(parsed) ? 1 : Math.max(1, parsed);
+    onSetQuantity(clamped);
+    setQuantityInput(String(clamped));
+  }
 
   return (
     <div className="border border-stone-200 rounded-lg overflow-hidden flex flex-col bg-white">
@@ -263,7 +275,7 @@ function ProductCard({
         <p className="text-xs font-semibold text-stone-900 line-clamp-2 min-h-[2rem] leading-tight">
           {product.name}
         </p>
-        <p className="text-sm font-bold text-stone-900">${product.price.toFixed(2)}</p>
+        <p className="text-sm font-bold text-stone-900">₪{product.price.toFixed(2)}</p>
 
         {!product.inStock ? (
           <p className="mt-auto text-[10px] font-semibold text-red-600 py-1.5">
@@ -281,15 +293,27 @@ function ProductCard({
             <button
               onClick={() => onSetQuantity(quantity - 1)}
               aria-label="Decrease quantity"
-              className="w-6 h-6 text-sm font-bold"
+              className="w-6 h-6 shrink-0 text-sm font-bold"
             >
               −
             </button>
-            <span className="text-xs font-semibold">{quantity}</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={quantityInput}
+              onChange={(e) => setQuantityInput(e.target.value.replace(/[^0-9]/g, ""))}
+              onBlur={commitQuantityInput}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+              aria-label="Quantity"
+              className="w-8 min-w-0 bg-transparent text-center text-xs font-semibold outline-none"
+            />
             <button
               onClick={() => onSetQuantity(quantity + 1)}
               aria-label="Increase quantity"
-              className="w-6 h-6 text-sm font-bold"
+              className="w-6 h-6 shrink-0 text-sm font-bold"
             >
               +
             </button>
@@ -460,7 +484,7 @@ function CheckoutSheet({
                     {line.quantity}x {line.product.name}
                   </span>
                   <span className="font-semibold text-stone-900">
-                    ${(line.product.price * line.quantity).toFixed(2)}
+                    ₪{(line.product.price * line.quantity).toFixed(2)}
                   </span>
                 </li>
               ))}
@@ -508,17 +532,17 @@ function CheckoutSheet({
                 <>
                   <div className="flex items-center justify-between text-sm text-stone-600">
                     <span>{t("checkout.subtotal")}</span>
-                    <span>${subtotal.toFixed(2)}</span>
+                    <span>₪{subtotal.toFixed(2)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm text-green-700">
                     <span>{t("checkout.discount", { percent: appliedCoupon.discountPercent })}</span>
-                    <span>-${discountAmount.toFixed(2)}</span>
+                    <span>-₪{discountAmount.toFixed(2)}</span>
                   </div>
                 </>
               )}
               <div className="flex items-center justify-between font-bold text-stone-900">
                 <span>{t("checkout.total")}</span>
-                <span>${total.toFixed(2)}</span>
+                <span>₪{total.toFixed(2)}</span>
               </div>
             </div>
 

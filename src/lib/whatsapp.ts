@@ -19,17 +19,17 @@ type OrderNotification = {
 
 function buildMessageBody(order: OrderNotification): string {
   const lines = order.items.map(
-    (item) => `- ${item.quantity}x ${item.productName} ($${item.price.toFixed(2)} each)`
+    (item) => `- ${item.quantity}x ${item.productName} (₪${item.price.toFixed(2)} each)`
   );
 
   const totalLines =
     order.couponCode && order.discountPercent
       ? [
-          `Subtotal: $${order.subtotal.toFixed(2)}`,
+          `Subtotal: ₪${order.subtotal.toFixed(2)}`,
           `Coupon: ${order.couponCode} (-${order.discountPercent}%)`,
-          `Total: $${order.total.toFixed(2)}`,
+          `Total: ₪${order.total.toFixed(2)}`,
         ]
-      : [`Total: $${order.total.toFixed(2)}`];
+      : [`Total: ₪${order.total.toFixed(2)}`];
 
   return [
     `New order #${order.orderId.slice(-6)}`,
