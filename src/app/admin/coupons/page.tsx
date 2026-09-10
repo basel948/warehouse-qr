@@ -76,66 +76,72 @@ export default function AdminCouponsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-4 space-y-8">
+    <div className="mx-auto max-w-3xl px-4 py-4 space-y-[22px]">
       <div>
-        <h1 className="text-xl font-bold text-stone-900 mb-4">{t("admin.coupons.title")}</h1>
+        <h1 className="text-xl font-bold text-[#1a1714] mb-4">{t("admin.coupons.title")}</h1>
 
-        <form onSubmit={addCoupon} className="bg-white border border-stone-200 rounded-lg p-4 space-y-2 mb-6">
-          <div className="flex gap-2">
-            <input
-              type="text"
-              placeholder={t("admin.coupons.codePlaceholder")}
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              className="flex-1 border border-stone-300 rounded px-3 py-2 uppercase"
-            />
-            <select
-              value={discountPercent}
-              onChange={(e) => setDiscountPercent(e.target.value)}
-              className="w-28 border border-stone-300 rounded px-3 py-2"
-            >
-              <option value="10">10%</option>
-              <option value="15">15%</option>
-              <option value="20">20%</option>
-            </select>
-          </div>
-          <button type="submit" className="bg-amber-600 text-white rounded px-4 py-2">
+        <form
+          onSubmit={addCoupon}
+          className="bg-white border border-[#eae5dc] rounded-[14px] p-[18px] flex flex-col sm:flex-row gap-2.5 sm:items-center mb-6"
+        >
+          <input
+            type="text"
+            placeholder={t("admin.coupons.codePlaceholder")}
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            className="flex-1 border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5 bg-[#f7f5f1] uppercase font-mono placeholder:normal-case placeholder:font-sans placeholder:text-[#a39a8e]"
+          />
+          <select
+            value={discountPercent}
+            onChange={(e) => setDiscountPercent(e.target.value)}
+            className="w-full sm:w-32 border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5 bg-[#f7f5f1]"
+          >
+            <option value="10">10%</option>
+            <option value="15">15%</option>
+            <option value="20">20%</option>
+          </select>
+          <button
+            type="submit"
+            className="bg-[var(--accent)] text-white rounded-[10px] px-5 py-2.5 text-sm font-semibold"
+          >
             {t("admin.coupons.addCoupon")}
           </button>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-[#b3402e] sm:basis-full">{error}</p>}
         </form>
 
         {loading ? (
-          <p className="text-sm text-stone-500">{t("admin.coupons.loading")}</p>
+          <p className="text-sm text-[#8a8177]">{t("admin.coupons.loading")}</p>
         ) : coupons.length === 0 ? (
-          <p className="text-sm text-stone-500">{t("admin.coupons.noCouponsYet")}</p>
+          <p className="text-sm text-[#8a8177]">{t("admin.coupons.noCouponsYet")}</p>
         ) : (
-          <ul className="divide-y divide-stone-200 bg-white border border-stone-200 rounded-lg overflow-hidden">
+          <ul className="divide-y divide-[#f2efe9] bg-white border border-[#eae5dc] rounded-[14px] overflow-hidden">
             {coupons.map((coupon) => (
-              <li key={coupon.id} className="flex items-center justify-between gap-4 p-4">
-                <div>
-                  <p className="font-mono font-medium">{coupon.code}</p>
-                  <p className="text-sm text-stone-500">
+              <li key={coupon.id} className="flex items-center justify-between gap-4 px-[18px] py-[15px]">
+                <div className="flex items-center gap-3.5 flex-wrap">
+                  <span className="font-mono font-semibold text-[15px] text-[#1a1714]">
+                    {coupon.code}
+                  </span>
+                  <span className="text-[13px] text-[#6b6259]">
                     {t("admin.coupons.percentOff", { percent: coupon.discountPercent })}
-                  </p>
+                  </span>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
                   <span
-                    className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                      coupon.active ? "bg-green-100 text-green-700" : "bg-stone-100 text-stone-500"
+                    className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                      coupon.active ? "bg-[#f1f7f1] text-[#2f6b3a]" : "bg-[#f2efe9] text-[#6b6259]"
                     }`}
                   >
                     {coupon.active ? t("admin.coupons.active") : t("admin.coupons.inactive")}
                   </span>
                   <button
                     onClick={() => toggleActive(coupon)}
-                    className="text-sm text-stone-600 underline"
+                    className="text-[13px] text-[#6b6259] underline"
                   >
                     {coupon.active ? t("admin.coupons.deactivate") : t("admin.coupons.activate")}
                   </button>
                   <button
                     onClick={() => deleteCoupon(coupon.id)}
-                    className="text-sm text-red-600 underline"
+                    className="text-[13px] text-[#b3402e] underline"
                   >
                     {t("admin.coupons.delete")}
                   </button>

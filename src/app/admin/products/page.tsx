@@ -200,9 +200,9 @@ export default function AdminProductsPage() {
   );
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-4 space-y-8">
+    <div className="mx-auto max-w-3xl px-4 py-4 space-y-[22px]">
       <div>
-        <h1 className="text-xl font-bold text-stone-900 mb-4">
+        <h1 className="text-xl font-bold text-[#1a1714] mb-4">
           {t("admin.products.categoriesTitle")}
         </h1>
 
@@ -212,25 +212,28 @@ export default function AdminProductsPage() {
             placeholder={t("admin.products.newCategoryPlaceholder")}
             value={newCategoryName}
             onChange={(e) => setNewCategoryName(e.target.value)}
-            className="flex-1 border border-stone-300 rounded px-3 py-2"
+            className="flex-1 border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5"
           />
-          <button type="submit" className="bg-amber-600 text-white rounded px-4 py-2">
+          <button
+            type="submit"
+            className="bg-[var(--accent)] text-white rounded-[10px] px-4 py-2.5 text-sm font-semibold"
+          >
             {t("admin.products.add")}
           </button>
         </form>
-        {categoryError && <p className="text-sm text-red-600 mb-3">{categoryError}</p>}
+        {categoryError && <p className="text-sm text-[#b3402e] mb-3">{categoryError}</p>}
 
         <ul className="flex flex-wrap gap-2">
           {categories.map((category) => (
             <li
               key={category.id}
-              className="flex items-center gap-2 border border-stone-300 bg-white rounded-full ps-3 pe-1 py-1 text-sm"
+              className="flex items-center gap-2 border border-[#e6e0d6] bg-white rounded-full ps-3.5 pe-1.5 py-1.5 text-[13px]"
             >
               {category.name}
               <button
                 onClick={() => deleteCategory(category.id)}
                 aria-label={t("admin.products.deleteCategoryAria", { name: category.name })}
-                className="text-stone-400 hover:text-red-600 rounded-full w-5 h-5 leading-none"
+                className="text-[#a39a8e] hover:text-[#b3402e] rounded-full w-5 h-5 leading-none"
               >
                 ×
               </button>
@@ -240,7 +243,7 @@ export default function AdminProductsPage() {
       </div>
 
       <div>
-        <h1 className="text-xl font-bold text-stone-900 mb-4">
+        <h1 className="text-xl font-bold text-[#1a1714] mb-4">
           {t("admin.products.productsTitle")}
         </h1>
 
@@ -249,25 +252,40 @@ export default function AdminProductsPage() {
           placeholder={t("admin.products.searchPlaceholder")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full border border-stone-300 bg-white rounded px-3 py-2 mb-4"
+          className="w-full border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5 mb-4"
         />
 
-        <form onSubmit={addProduct} className="bg-white border border-stone-200 rounded-lg p-4 space-y-2 mb-6">
-          <div className="flex gap-2">
+        <form
+          onSubmit={addProduct}
+          className="bg-white border border-[#eae5dc] rounded-[14px] p-[18px] space-y-2.5 mb-6"
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_130px] gap-2.5">
             <input
               type="text"
               placeholder={t("admin.products.namePlaceholder")}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="flex-1 border border-stone-300 rounded px-3 py-2"
+              className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
             />
+            <select
+              value={categoryId}
+              onChange={(e) => setCategoryId(e.target.value)}
+              className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
+            >
+              <option value="">{t("admin.products.noCategoryOption")}</option>
+              {categories.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+            </select>
             <input
               type="number"
               step="0.01"
               placeholder={t("admin.products.pricePlaceholder")}
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              className="w-28 border border-stone-300 rounded px-3 py-2"
+              className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
             />
           </div>
           <input
@@ -275,142 +293,141 @@ export default function AdminProductsPage() {
             placeholder={t("admin.products.descriptionPlaceholder")}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            className="w-full border border-stone-300 rounded px-3 py-2"
+            className="w-full border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
           />
-          <ImageUploadField
-            value={imageUrl}
-            onChange={setImageUrl}
-            uploadLabel={t("admin.products.uploadImage")}
-            uploadingLabel={t("admin.products.uploading")}
-            hintText={t("admin.products.uploadHint")}
-            errorMessages={{
-              notImage: t("admin.products.uploadErrorNotImage"),
-              tooLarge: t("admin.products.uploadErrorTooLarge"),
-              network: t("admin.products.uploadErrorNetwork"),
-              generic: t("admin.products.uploadErrorGeneric"),
-            }}
-          />
-          <select
-            value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
-            className="w-full border border-stone-300 rounded px-3 py-2"
-          >
-            <option value="">{t("admin.products.noCategoryOption")}</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="bg-amber-600 text-white rounded px-4 py-2">
-            {t("admin.products.addProduct")}
-          </button>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          <div className="flex items-center gap-3.5 flex-wrap">
+            <ImageUploadField
+              value={imageUrl}
+              onChange={setImageUrl}
+              uploadLabel={t("admin.products.uploadImage")}
+              uploadingLabel={t("admin.products.uploading")}
+              hintText={t("admin.products.uploadHint")}
+              errorMessages={{
+                notImage: t("admin.products.uploadErrorNotImage"),
+                tooLarge: t("admin.products.uploadErrorTooLarge"),
+                network: t("admin.products.uploadErrorNetwork"),
+                generic: t("admin.products.uploadErrorGeneric"),
+              }}
+            />
+            <button
+              type="submit"
+              className="ms-auto bg-[var(--accent)] text-white rounded-[10px] px-5 py-2.5 text-sm font-semibold"
+            >
+              {t("admin.products.addProduct")}
+            </button>
+          </div>
+          {error && <p className="text-sm text-[#b3402e]">{error}</p>}
         </form>
 
         {loading ? (
-          <p className="text-sm text-stone-500">{t("admin.products.loading")}</p>
+          <p className="text-sm text-[#8a8177]">{t("admin.products.loading")}</p>
         ) : products.length === 0 ? (
-          <p className="text-sm text-stone-500">{t("admin.products.noProductsYet")}</p>
+          <p className="text-sm text-[#8a8177]">{t("admin.products.noProductsYet")}</p>
         ) : filteredProducts.length === 0 ? (
-          <p className="text-sm text-stone-500">
+          <p className="text-sm text-[#8a8177]">
             {t("admin.products.noProductsMatch", { query: searchQuery })}
           </p>
         ) : (
-          <ul className="divide-y divide-stone-200 bg-white border border-stone-200 rounded-lg overflow-hidden">
-            {filteredProducts.map((product) =>
-              editingId === product.id ? (
-                <li key={product.id} className="p-4">
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      saveEdit(product.id);
-                    }}
-                    className="space-y-2"
-                  >
-                    <div className="flex gap-2">
+          <div className="bg-white border border-[#eae5dc] rounded-[14px] overflow-hidden">
+            <div className="hidden sm:grid grid-cols-[1fr_150px_110px_150px] gap-4 px-[18px] py-[11px] bg-[#faf8f5] border-b border-[#eae5dc] text-xs font-semibold text-[#8a8177]">
+              <span>{t("admin.products.colProduct")}</span>
+              <span>{t("admin.products.colCategory")}</span>
+              <span>{t("admin.products.colPrice")}</span>
+              <span />
+            </div>
+            <ul className="divide-y divide-[#f2efe9]">
+              {filteredProducts.map((product) =>
+                editingId === product.id ? (
+                  <li key={product.id} className="p-[18px] bg-[#fdfaf4]">
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        saveEdit(product.id);
+                      }}
+                      className="space-y-2"
+                    >
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder={t("admin.products.namePlaceholder")}
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          className="flex-1 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+                        />
+                        <input
+                          type="number"
+                          step="0.01"
+                          placeholder={t("admin.products.pricePlaceholder")}
+                          value={editPrice}
+                          onChange={(e) => setEditPrice(e.target.value)}
+                          className="w-24 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+                        />
+                      </div>
                       <input
                         type="text"
-                        placeholder={t("admin.products.namePlaceholder")}
-                        value={editName}
-                        onChange={(e) => setEditName(e.target.value)}
-                        className="flex-1 border border-stone-300 rounded px-3 py-2 text-sm"
+                        placeholder={t("admin.products.descriptionPlaceholder")}
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        className="w-full border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
                       />
-                      <input
-                        type="number"
-                        step="0.01"
-                        placeholder={t("admin.products.pricePlaceholder")}
-                        value={editPrice}
-                        onChange={(e) => setEditPrice(e.target.value)}
-                        className="w-24 border border-stone-300 rounded px-3 py-2 text-sm"
+                      <ImageUploadField
+                        value={editImageUrl}
+                        onChange={setEditImageUrl}
+                        uploadLabel={t("admin.products.uploadImage")}
+                        uploadingLabel={t("admin.products.uploading")}
+                        hintText={t("admin.products.uploadHint")}
+                        errorMessages={{
+                          notImage: t("admin.products.uploadErrorNotImage"),
+                          tooLarge: t("admin.products.uploadErrorTooLarge"),
+                          network: t("admin.products.uploadErrorNetwork"),
+                          generic: t("admin.products.uploadErrorGeneric"),
+                        }}
                       />
-                    </div>
-                    <input
-                      type="text"
-                      placeholder={t("admin.products.descriptionPlaceholder")}
-                      value={editDescription}
-                      onChange={(e) => setEditDescription(e.target.value)}
-                      className="w-full border border-stone-300 rounded px-3 py-2 text-sm"
-                    />
-                    <ImageUploadField
-                      value={editImageUrl}
-                      onChange={setEditImageUrl}
-                      uploadLabel={t("admin.products.uploadImage")}
-                      uploadingLabel={t("admin.products.uploading")}
-                      hintText={t("admin.products.uploadHint")}
-                      errorMessages={{
-                        notImage: t("admin.products.uploadErrorNotImage"),
-                        tooLarge: t("admin.products.uploadErrorTooLarge"),
-                        network: t("admin.products.uploadErrorNetwork"),
-                        generic: t("admin.products.uploadErrorGeneric"),
-                      }}
-                    />
-                    <div className="flex gap-3">
-                      <button
-                        type="submit"
-                        className="bg-amber-600 text-white text-sm rounded px-3 py-1.5"
-                      >
-                        {t("admin.products.save")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={cancelEdit}
-                        className="text-sm text-stone-600 underline"
-                      >
-                        {t("admin.products.cancel")}
-                      </button>
-                    </div>
-                    {editError && <p className="text-sm text-red-600">{editError}</p>}
-                  </form>
-                </li>
-              ) : (
-                <li key={product.id} className="flex items-center justify-between gap-4 p-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    {product.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={product.imageUrl}
-                        alt=""
-                        className="w-10 h-10 object-cover rounded border border-stone-200 shrink-0"
-                      />
-                    ) : (
-                      <div
-                        className="w-10 h-10 shrink-0 rounded border border-dashed border-stone-300 flex items-center justify-center text-stone-300 text-sm"
-                        aria-hidden
-                      >
-                        📦
+                      <div className="flex gap-3">
+                        <button
+                          type="submit"
+                          className="bg-[#1a1714] text-white text-sm font-semibold rounded-[9px] px-3.5 py-2"
+                        >
+                          {t("admin.products.save")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEdit}
+                          className="text-sm text-[#6b6259]"
+                        >
+                          {t("admin.products.cancel")}
+                        </button>
                       </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{product.name}</p>
-                      <p className="text-sm text-stone-500">₪{product.price.toFixed(2)}</p>
+                      {editError && <p className="text-sm text-[#b3402e]">{editError}</p>}
+                    </form>
+                  </li>
+                ) : (
+                  <li
+                    key={product.id}
+                    className="grid grid-cols-1 sm:grid-cols-[1fr_150px_110px_150px] gap-2 sm:gap-4 items-center px-[18px] py-3.5 text-sm"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {product.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={product.imageUrl}
+                          alt=""
+                          className="w-[38px] h-[38px] object-cover rounded-[9px] border border-[#eae5dc] shrink-0"
+                        />
+                      ) : (
+                        <div
+                          className="w-[38px] h-[38px] shrink-0 rounded-[9px] bg-[#f2efe9] flex items-center justify-center text-[#c5bdb1] text-xs"
+                          aria-hidden
+                        >
+                          📦
+                        </div>
+                      )}
+                      <span className="text-[#1a1714] truncate">{product.name}</span>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3 shrink-0">
                     <select
                       value={product.categoryId ?? ""}
                       onChange={(e) => setProductCategory(product, e.target.value)}
-                      className="border border-stone-300 rounded px-2 py-1 text-sm"
+                      className="border border-[#e6e0d6] rounded-[9px] px-2.5 py-1.5 text-sm bg-white"
                     >
                       <option value="">{t("admin.products.noCategoryOption")}</option>
                       {categories.map((category) => (
@@ -419,31 +436,45 @@ export default function AdminProductsPage() {
                         </option>
                       ))}
                     </select>
-                    <button
-                      onClick={() => toggleStock(product)}
-                      className="text-sm text-stone-600 underline"
-                    >
-                      {product.inStock
-                        ? t("admin.products.markOutOfStock")
-                        : t("admin.products.markInStock")}
-                    </button>
-                    <button
-                      onClick={() => startEdit(product)}
-                      className="text-sm text-stone-600 underline"
-                    >
-                      {t("admin.products.edit")}
-                    </button>
-                    <button
-                      onClick={() => deleteProduct(product.id)}
-                      className="text-sm text-red-600 underline"
-                    >
-                      {t("admin.products.delete")}
-                    </button>
-                  </div>
-                </li>
-              )
-            )}
-          </ul>
+                    <span className="text-[#1a1714] font-semibold">₪{product.price.toFixed(2)}</span>
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span
+                        className={`text-xs font-semibold rounded-full px-2.5 py-1 ${
+                          product.inStock
+                            ? "bg-[#f1f7f1] text-[#2f6b3a]"
+                            : "bg-[#f2efe9] text-[#6b6259]"
+                        }`}
+                      >
+                        {product.inStock
+                          ? t("admin.products.inStockLabel")
+                          : t("admin.products.outOfStockLabel")}
+                      </span>
+                      <button
+                        onClick={() => toggleStock(product)}
+                        className="text-[13px] text-[#6b6259] underline"
+                      >
+                        {product.inStock
+                          ? t("admin.products.markOutOfStock")
+                          : t("admin.products.markInStock")}
+                      </button>
+                      <button
+                        onClick={() => startEdit(product)}
+                        className="text-[13px] text-[#6b6259] underline"
+                      >
+                        {t("admin.products.edit")}
+                      </button>
+                      <button
+                        onClick={() => deleteProduct(product.id)}
+                        className="text-[13px] text-[#b3402e] underline"
+                      >
+                        {t("admin.products.delete")}
+                      </button>
+                    </div>
+                  </li>
+                )
+              )}
+            </ul>
+          </div>
         )}
       </div>
     </div>

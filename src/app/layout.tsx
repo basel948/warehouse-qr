@@ -1,20 +1,16 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
-import { WAREHOUSE_NAME } from "@/lib/branding";
+import { IBM_Plex_Sans_Arabic } from "next/font/google";
+import { WAREHOUSE_ACCENT_COLOR, WAREHOUSE_NAME } from "@/lib/branding";
 import { LocaleProvider } from "@/components/locale-provider";
 import { getLocaleFromCookies } from "@/lib/i18n/get-locale";
 import { LOCALE_DIR } from "@/lib/i18n/locales";
 import "./globals.css";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-  weight: "100 900",
-});
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
+const ibmPlexSansArabic = IBM_Plex_Sans_Arabic({
+  subsets: ["arabic", "latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-sans",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -32,7 +28,8 @@ export default function RootLayout({
   return (
     <html lang={locale} dir={LOCALE_DIR[locale]}>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${ibmPlexSansArabic.variable} antialiased`}
+        style={{ ["--accent" as string]: WAREHOUSE_ACCENT_COLOR }}
       >
         <LocaleProvider initialLocale={locale}>{children}</LocaleProvider>
       </body>

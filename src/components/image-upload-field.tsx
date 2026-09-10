@@ -92,11 +92,11 @@ export function ImageUploadField({
         <img
           src={value}
           alt=""
-          className="w-14 h-14 object-cover rounded border border-stone-200 shrink-0"
+          className="w-14 h-14 object-cover rounded-[10px] border border-[#eae5dc] shrink-0"
         />
       ) : (
         <div
-          className="w-14 h-14 shrink-0 rounded border border-dashed border-stone-300 flex items-center justify-center text-stone-300 text-xl"
+          className="w-14 h-14 shrink-0 rounded-[10px] border border-dashed border-[#ddd6cb] flex items-center justify-center text-[#c5bdb1] text-xl"
           aria-hidden
         >
           📦
@@ -107,26 +107,26 @@ export function ImageUploadField({
           type="button"
           onClick={() => inputRef.current?.click()}
           disabled={uploading}
-          className="text-sm border border-stone-300 rounded px-3 py-1.5 disabled:opacity-50 self-start"
+          className="text-[13px] font-semibold border border-[#ddd6cb] bg-white rounded-[9px] px-3.5 py-[7px] disabled:opacity-50 self-start"
         >
           {uploading ? `${uploadingLabel} ${progress}%` : uploadLabel}
         </button>
-        {!uploading && !errorText && <p className="text-xs text-stone-400">{hintText}</p>}
+        {!uploading && !errorText && <p className="text-[11px] text-[#a39a8e]">{hintText}</p>}
         {uploading && (
           <div
             role="progressbar"
             aria-valuenow={progress}
             aria-valuemin={0}
             aria-valuemax={100}
-            className="w-32 h-1.5 bg-stone-200 rounded-full overflow-hidden"
+            className="w-32 h-1.5 bg-[#f2efe9] rounded-full overflow-hidden"
           >
             <div
-              className="h-full bg-amber-600 transition-[width] duration-150"
+              className="h-full bg-[var(--accent)] transition-[width] duration-150"
               style={{ width: `${progress}%` }}
             />
           </div>
         )}
-        {errorText && <p className="text-xs text-red-600">{errorText}</p>}
+        {errorText && <p className="text-xs text-[#b3402e]">{errorText}</p>}
       </div>
       <input
         ref={inputRef}

@@ -7,14 +7,16 @@ export function LanguageSwitcher() {
   const { locale, setLocale } = useLocale();
 
   return (
-    <div className="flex shrink-0 rounded-full border border-stone-300 bg-white p-0.5 text-xs font-semibold">
+    <div className="flex shrink-0 rounded-full bg-[#f2efe9] p-[3px] text-xs font-semibold">
       {LOCALES.map((code) => (
         <button
           key={code}
           onClick={() => setLocale(code)}
           aria-pressed={locale === code}
           className={`rounded-full px-2.5 py-1 transition-colors ${
-            locale === code ? "bg-amber-600 text-white" : "text-stone-600"
+            locale === code
+              ? "bg-white text-[#1a1714] shadow-sm"
+              : "text-[#8a8177]"
           }`}
         >
           {LOCALE_NATIVE_NAME[code]}

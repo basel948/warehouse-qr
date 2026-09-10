@@ -82,16 +82,15 @@ export function OrderCatalog({ products }: { products: Product[] }) {
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 pb-28">
-      <header className="sticky top-0 z-10 bg-white border-b border-stone-200">
-        <div className="h-1.5 bg-amber-600" aria-hidden />
-        <div className="px-4 pt-3 pb-3">
-          <div className="flex items-center justify-between gap-3 mb-3">
+    <div className="min-h-screen bg-[#f7f5f1] pb-28">
+      <header className="sticky top-0 z-10 bg-white border-b border-[#eae5dc]">
+        <div className="px-4 pt-4 pb-3">
+          <div className="flex items-center justify-between gap-3 mb-3.5">
             <BrandLogo />
             <LanguageSwitcher />
           </div>
           <div className="relative">
-            <span className="absolute start-3 top-1/2 -translate-y-1/2 text-stone-400" aria-hidden>
+            <span className="absolute start-3.5 top-1/2 -translate-y-1/2 text-[#a39a8e]" aria-hidden>
               🔍
             </span>
             <input
@@ -99,7 +98,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
               placeholder={t("catalog.searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full border border-stone-300 rounded-lg ps-9 pe-3 py-2 text-sm bg-white"
+              className="w-full border border-[#e6e0d6] rounded-xl ps-9 pe-3 py-2.5 text-sm bg-[#f4f1ec] placeholder:text-[#a39a8e]"
             />
           </div>
         </div>
@@ -121,10 +120,10 @@ export function OrderCatalog({ products }: { products: Product[] }) {
         )}
       </header>
 
-      <main className="px-4 pt-4">
+      <main className="px-4 pt-5">
         {isSearching ? (
           <>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
               {searchResults.map((product) => (
                 <ProductCard
                   key={product.id}
@@ -136,7 +135,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
               ))}
             </div>
             {searchResults.length === 0 && (
-              <p className="text-sm text-stone-500 py-8 text-center">
+              <p className="text-sm text-[#8a8177] py-8 text-center">
                 {t("catalog.noProductsMatch", { query: searchQuery })}
               </p>
             )}
@@ -144,14 +143,13 @@ export function OrderCatalog({ products }: { products: Product[] }) {
         ) : (
           <>
             {visibleSections.map((section) => (
-              <section key={section.key} className="mb-8">
+              <section key={section.key} className="mb-7">
                 {activeTab === "all" && (
-                  <h2 className="flex items-center gap-2 text-sm font-extrabold uppercase tracking-wide text-stone-900 mb-3">
-                    <span className="inline-block h-3.5 w-1.5 bg-amber-600 rounded-sm" aria-hidden />
+                  <h2 className="flex items-baseline justify-between text-[15px] font-bold text-[#1a1714] mb-3">
                     {section.name}
                   </h2>
                 )}
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
                   {section.products.map((product) => (
                     <ProductCard
                       key={product.id}
@@ -166,7 +164,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
             ))}
 
             {visibleSections.every((s) => s.products.length === 0) && (
-              <p className="text-sm text-stone-500 py-8 text-center">
+              <p className="text-sm text-[#8a8177] py-8 text-center">
                 {t("catalog.noProductsInCategory")}
               </p>
             )}
@@ -175,19 +173,21 @@ export function OrderCatalog({ products }: { products: Product[] }) {
       </main>
 
       {cartCount > 0 && !checkoutOpen && (
-        <button
-          onClick={() => setCheckoutOpen(true)}
-          className="fixed bottom-0 inset-x-0 z-20 bg-stone-900 text-white px-4 py-4 flex items-center justify-between font-semibold shadow-lg"
-        >
-          <span>
-            {cartCount === 1
-              ? t("catalog.cartItemsOne")
-              : t("catalog.cartItemsOther", { count: cartCount })}
-          </span>
-          <span className="text-amber-400">
-            ₪{cartTotal.toFixed(2)} · {t("catalog.checkout")}
-          </span>
-        </button>
+        <div className="fixed bottom-0 inset-x-0 z-20 px-3.5 pt-4 pb-4 bg-gradient-to-t from-[#f7f5f1] from-[62%] to-transparent">
+          <button
+            onClick={() => setCheckoutOpen(true)}
+            className="w-full bg-[#1a1714] text-white rounded-2xl px-4 py-[13px] flex items-center justify-between font-semibold shadow-[0_12px_24px_-12px_rgba(26,23,20,0.7)]"
+          >
+            <span className="text-[13px] text-[#c9c1b6]">
+              {cartCount === 1
+                ? t("catalog.cartItemsOne")
+                : t("catalog.cartItemsOther", { count: cartCount })}
+            </span>
+            <span className="text-[14px] font-semibold text-[var(--accent)]">
+              ₪{cartTotal.toFixed(2)} · {t("catalog.checkout")}
+            </span>
+          </button>
+        </div>
       )}
 
       {checkoutOpen && (
@@ -218,10 +218,8 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold border transition-colors ${
-        active
-          ? "bg-amber-600 text-white border-amber-600"
-          : "bg-white text-stone-700 border-stone-300"
+      className={`shrink-0 rounded-full px-4 py-2 text-[13px] font-semibold transition-colors ${
+        active ? "bg-[#1a1714] text-white" : "bg-[#f2efe9] text-[#4a443c]"
       }`}
     >
       {children}
@@ -255,8 +253,12 @@ function ProductCard({
   }
 
   return (
-    <div className="border border-stone-200 rounded-lg overflow-hidden flex flex-col bg-white">
-      <div className="aspect-square bg-stone-100 flex items-center justify-center">
+    <div
+      className={`border border-[#eae5dc] rounded-[14px] overflow-hidden flex flex-col bg-white ${
+        !product.inStock ? "opacity-[.55]" : ""
+      }`}
+    >
+      <div className="aspect-square bg-[#f2efe9] flex items-center justify-center">
         {product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -271,29 +273,29 @@ function ProductCard({
         )}
       </div>
 
-      <div className="p-1.5 flex flex-col gap-0.5 flex-1">
-        <p className="text-xs font-semibold text-stone-900 line-clamp-2 min-h-[2rem] leading-tight">
+      <div className="p-[9px] pb-2.5 flex flex-col gap-[5px] flex-1">
+        <p className="text-xs font-medium text-[#2b2620] line-clamp-2 min-h-[33px] leading-tight">
           {product.name}
         </p>
-        <p className="text-sm font-bold text-stone-900">₪{product.price.toFixed(2)}</p>
+        <p className="text-sm font-bold text-[#1a1714]">₪{product.price.toFixed(2)}</p>
 
         {!product.inStock ? (
-          <p className="mt-auto text-[10px] font-semibold text-red-600 py-1.5">
+          <p className="mt-auto text-[11px] font-semibold text-[#8a8177] bg-[#f2efe9] rounded-[9px] py-2 text-center">
             {t("catalog.outOfStock")}
           </p>
         ) : quantity === 0 ? (
           <button
             onClick={onAdd}
-            className="mt-auto bg-amber-600 text-white text-xs font-semibold rounded-md py-1.5"
+            className="mt-auto bg-[var(--accent)] text-white text-xs font-semibold rounded-[9px] py-2"
           >
             {t("catalog.addToCart")}
           </button>
         ) : (
-          <div className="mt-auto flex items-center justify-between bg-stone-900 rounded-md text-white">
+          <div className="mt-auto flex items-center justify-between bg-[#1a1714] rounded-[9px] text-white p-[2px]">
             <button
               onClick={() => onSetQuantity(quantity - 1)}
               aria-label="Decrease quantity"
-              className="w-6 h-6 shrink-0 text-sm font-bold"
+              className="w-[26px] h-[26px] shrink-0 text-base font-bold leading-none"
             >
               −
             </button>
@@ -308,12 +310,12 @@ function ProductCard({
                 if (e.key === "Enter") e.currentTarget.blur();
               }}
               aria-label="Quantity"
-              className="w-8 min-w-0 bg-transparent text-center text-xs font-semibold outline-none"
+              className="w-8 min-w-0 bg-transparent text-center text-[13px] font-semibold outline-none"
             />
             <button
               onClick={() => onSetQuantity(quantity + 1)}
               aria-label="Increase quantity"
-              className="w-6 h-6 shrink-0 text-sm font-bold"
+              className="w-[26px] h-[26px] shrink-0 text-base font-bold leading-none"
             >
               +
             </button>
@@ -438,52 +440,55 @@ function CheckoutSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end sm:items-center sm:justify-center bg-stone-900/60">
-      <div className="w-full sm:max-w-md bg-white rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-30 flex items-end sm:items-center sm:justify-center bg-[#1a1714]/55">
+      <div className="w-full sm:max-w-md bg-white rounded-t-[22px] sm:rounded-2xl max-h-[90vh] overflow-y-auto">
         {success ? (
-          <div className="p-6 text-center space-y-3">
-            <p className="text-2xl">✅</p>
-            <p className="font-semibold text-stone-900">{t("checkout.successTitle")}</p>
+          <div className="p-8 text-center">
+            <div className="w-[52px] h-[52px] rounded-full bg-[#f1f7f1] text-[#2f6b3a] flex items-center justify-center text-2xl mx-auto mb-3.5">
+              ✓
+            </div>
+            <p className="font-bold text-[18px] text-[#1a1714] mb-2">{t("checkout.successTitle")}</p>
+            <p className="text-sm text-[#6b6259] mb-1.5">
+              {success.whatsappError
+                ? t("checkout.whatsappPending")
+                : t("checkout.whatsappSent")}
+            </p>
             {success.couponCode && (
-              <p className="text-sm text-green-700 font-medium">
+              <p className="text-[13px] font-semibold text-[#2f6b3a] mb-2">
                 {t("checkout.successCouponSaved", {
                   code: success.couponCode,
                   amount: success.discountAmount.toFixed(2),
                 })}
               </p>
             )}
-            <p className="text-sm text-stone-600">
-              {success.whatsappError
-                ? t("checkout.whatsappPending")
-                : t("checkout.whatsappSent")}
-            </p>
             <button
               onClick={onOrdered}
-              className="w-full bg-amber-600 text-white rounded-lg py-3 font-semibold mt-4"
+              className="w-full bg-[#1a1714] text-white rounded-xl py-[15px] font-semibold text-base mt-4"
             >
               {t("checkout.done")}
             </button>
           </div>
         ) : (
-          <div className="p-4">
+          <div className="p-[18px] pb-[22px]">
+            <div className="w-[38px] h-1 rounded-full bg-[#e0d9cf] mx-auto mb-4 sm:hidden" aria-hidden />
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-stone-900">{t("checkout.title")}</h2>
+              <h2 className="text-[19px] font-bold text-[#1a1714]">{t("checkout.title")}</h2>
               <button
                 onClick={onClose}
                 aria-label={t("checkout.close")}
-                className="w-8 h-8 text-xl text-stone-500"
+                className="w-[30px] h-[30px] rounded-full bg-[#f2efe9] text-[#6b6259] flex items-center justify-center text-base"
               >
                 ×
               </button>
             </div>
 
-            <ul className="divide-y divide-stone-200 mb-4">
+            <ul className="divide-y divide-[#f0ece5] mb-4">
               {lines.map((line) => (
-                <li key={line.product.id} className="py-2 flex items-center justify-between text-sm">
-                  <span className="text-stone-800">
+                <li key={line.product.id} className="py-[11px] flex items-center justify-between text-sm">
+                  <span className="text-[#2b2620]">
                     {line.quantity}x {line.product.name}
                   </span>
-                  <span className="font-semibold text-stone-900">
+                  <span className="font-semibold text-[#1a1714]">
                     ₪{(line.product.price * line.quantity).toFixed(2)}
                   </span>
                 </li>
@@ -492,8 +497,8 @@ function CheckoutSheet({
 
             <div className="mb-4">
               {appliedCoupon ? (
-                <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                  <span className="text-sm font-semibold text-green-700">
+                <div className="flex items-center justify-between bg-[#f1f7f1] border border-[#cfe3cf] rounded-xl px-3.5 py-[11px]">
+                  <span className="text-sm font-semibold text-[#2f6b3a]">
                     {t("checkout.couponApplied", {
                       code: appliedCoupon.code,
                       percent: appliedCoupon.discountPercent,
@@ -501,7 +506,7 @@ function CheckoutSheet({
                   </span>
                   <button
                     onClick={removeCoupon}
-                    className="text-sm text-green-700 underline"
+                    className="text-sm text-[#2f6b3a] underline"
                   >
                     {t("checkout.remove")}
                   </button>
@@ -513,64 +518,64 @@ function CheckoutSheet({
                     placeholder={t("checkout.couponPlaceholder")}
                     value={couponInput}
                     onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                    className="flex-1 border border-stone-300 rounded-lg px-3 py-2 uppercase"
+                    className="flex-1 border border-[#e6e0d6] rounded-xl px-3.5 py-[11px] bg-[#f7f5f1] uppercase placeholder:normal-case placeholder:text-[#a39a8e]"
                   />
                   <button
                     onClick={applyCoupon}
                     disabled={validatingCoupon}
-                    className="shrink-0 border border-stone-900 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                    className="shrink-0 border border-[#1a1714] text-[#1a1714] rounded-xl px-[18px] py-[11px] text-sm font-semibold disabled:opacity-50"
                   >
                     {validatingCoupon ? t("checkout.checking") : t("checkout.apply")}
                   </button>
                 </div>
               )}
-              {couponError && <p className="text-sm text-red-600 mt-1">{couponError}</p>}
+              {couponError && <p className="text-[13px] text-[#b3402e] mt-1">{couponError}</p>}
             </div>
 
-            <div className="mb-4 space-y-1">
+            <div className="mb-4 space-y-[7px] text-sm">
               {appliedCoupon && (
                 <>
-                  <div className="flex items-center justify-between text-sm text-stone-600">
+                  <div className="flex items-center justify-between text-[#6b6259]">
                     <span>{t("checkout.subtotal")}</span>
                     <span>₪{subtotal.toFixed(2)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-sm text-green-700">
+                  <div className="flex items-center justify-between text-[#2f6b3a]">
                     <span>{t("checkout.discount", { percent: appliedCoupon.discountPercent })}</span>
                     <span>-₪{discountAmount.toFixed(2)}</span>
                   </div>
                 </>
               )}
-              <div className="flex items-center justify-between font-bold text-stone-900">
+              <div className="flex items-center justify-between text-[17px] font-bold text-[#1a1714] pt-[7px] border-t border-[#f0ece5]">
                 <span>{t("checkout.total")}</span>
                 <span>₪{total.toFixed(2)}</span>
               </div>
             </div>
 
-            <div className="space-y-2 mb-4">
+            <div className="space-y-2.5 mb-4">
               <input
                 type="text"
                 placeholder={t("checkout.namePlaceholder")}
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
-                className="w-full border border-stone-300 rounded-lg px-3 py-3"
+                className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[13px] bg-[#f7f5f1] placeholder:text-[#a39a8e]"
               />
               <input
                 type="tel"
                 placeholder={t("checkout.phonePlaceholder")}
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
-                className="w-full border border-stone-300 rounded-lg px-3 py-3"
+                className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[13px] bg-[#f7f5f1] placeholder:text-[#a39a8e]"
               />
             </div>
 
             <button
               onClick={submitOrder}
               disabled={submitting}
-              className="w-full bg-amber-600 text-white rounded-lg py-3 font-semibold disabled:opacity-50"
+              className="w-full bg-[var(--accent)] text-white rounded-xl py-[15px] font-semibold text-base disabled:opacity-50"
             >
               {submitting ? t("checkout.placingOrder") : t("checkout.placeOrder")}
             </button>
-            {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+            {error && <p className="text-sm text-[#b3402e] mt-2">{error}</p>}
           </div>
         )}
       </div>

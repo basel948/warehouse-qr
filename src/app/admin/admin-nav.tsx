@@ -10,26 +10,34 @@ export function AdminNav() {
   const { t } = useLocale();
 
   return (
-    <nav className="bg-white border-b border-stone-200 mb-6">
-      <div className="h-1 bg-amber-600" aria-hidden />
+    <nav className="bg-white border-b border-[#eae5dc] mb-6">
       <div className="mx-auto max-w-3xl px-4 py-3 flex items-center gap-5">
         <Link href="/admin">
           <BrandLogo size="sm" />
         </Link>
-        <Link href="/admin/products" className="text-sm font-medium text-stone-600">
+        <Link
+          href="/admin/products"
+          className="text-sm font-medium px-3 py-1.5 rounded-lg text-[#6b6259] hover:bg-[#f2efe9] hover:text-[#1a1714] transition-colors"
+        >
           {t("nav.products")}
         </Link>
-        <Link href="/admin/orders" className="text-sm font-medium text-stone-600">
+        <Link
+          href="/admin/orders"
+          className="text-sm font-medium px-3 py-1.5 rounded-lg text-[#6b6259] hover:bg-[#f2efe9] hover:text-[#1a1714] transition-colors"
+        >
           {t("nav.orders")}
         </Link>
-        <Link href="/admin/coupons" className="text-sm font-medium text-stone-600">
+        <Link
+          href="/admin/coupons"
+          className="text-sm font-medium px-3 py-1.5 rounded-lg text-[#6b6259] hover:bg-[#f2efe9] hover:text-[#1a1714] transition-colors"
+        >
           {t("nav.coupons")}
         </Link>
-        <div className="ms-auto flex items-center gap-3">
+        <div className="ms-auto flex items-center gap-3.5">
           <LanguageSwitcher />
           <button
             onClick={() => signOut({ callbackUrl: "/admin/login" })}
-            className="text-sm font-medium text-stone-600"
+            className="text-sm font-medium text-[#6b6259]"
           >
             {t("nav.signOut")}
           </button>
