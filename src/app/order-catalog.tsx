@@ -17,6 +17,7 @@ type Product = {
   description: string | null;
   price: number;
   imageUrl: string | null;
+  brand: string | null;
   inStock: boolean;
   category: Category | null;
 };
@@ -34,8 +35,15 @@ export function OrderCatalog({ products }: { products: Product[] }) {
   const { t } = useLocale();
   const [cart, setCart] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState<string>("all");
+  const [activeBrand, setActiveBrand] = useState<string>("all");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+
+  function selectTab(key: string) {
+    setActiveTab(key);
+    setActiveBrand("all");
+  }
 
   const sections: Section[] = useMemo(() => {
     const byKey = new Map<string, Section>();
@@ -59,8 +67,27 @@ export function OrderCatalog({ products }: { products: Product[] }) {
     return products.filter((product) => product.name.toLowerCase().includes(query));
   }, [products, searchQuery, isSearching]);
 
-  const visibleSections =
+  const rawVisibleSections =
     activeTab === "all" ? sections : sections.filter((section) => section.key === activeTab);
+
+  const availableBrands = useMemo(() => {
+    if (activeTab === "all") return [];
+    const brands = new Set<string>();
+    for (const section of rawVisibleSections) {
+      for (const product of section.products) {
+        if (product.brand) brands.add(product.brand);
+      }
+    }
+    return Array.from(brands).sort();
+  }, [rawVisibleSections, activeTab]);
+
+  const visibleSections =
+    activeBrand === "all"
+      ? rawVisibleSections
+      : rawVisibleSections.map((section) => ({
+          ...section,
+          products: section.products.filter((product) => product.brand === activeBrand),
+        }));
 
   const cartCount = Object.values(cart).reduce((sum, qty) => sum + qty, 0);
   const cartTotal = products.reduce(
@@ -80,6 +107,8 @@ export function OrderCatalog({ products }: { products: Product[] }) {
       return next;
     });
   }
+
+  const expandedProduct = products.find((p) => p.id === expandedProductId) ?? null;
 
   return (
     <div className="min-h-screen bg-[#f7f5f1] pb-28">
@@ -104,17 +133,33 @@ export function OrderCatalog({ products }: { products: Product[] }) {
         </div>
         {!isSearching && (
           <div className="flex gap-2 overflow-x-auto px-4 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <TabButton active={activeTab === "all"} onClick={() => setActiveTab("all")}>
+            <TabButton active={activeTab === "all"} onClick={() => selectTab("all")}>
               {t("catalog.all")}
             </TabButton>
             {sections.map((section) => (
               <TabButton
                 key={section.key}
                 active={activeTab === section.key}
-                onClick={() => setActiveTab(section.key)}
+                onClick={() => selectTab(section.key)}
               >
                 {section.name}
               </TabButton>
+            ))}
+          </div>
+        )}
+        {!isSearching && availableBrands.length > 0 && (
+          <div className="flex gap-1.5 overflow-x-auto px-4 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <BrandChip active={activeBrand === "all"} onClick={() => setActiveBrand("all")}>
+              {t("catalog.all")}
+            </BrandChip>
+            {availableBrands.map((brand) => (
+              <BrandChip
+                key={brand}
+                active={activeBrand === brand}
+                onClick={() => setActiveBrand(brand)}
+              >
+                {brand}
+              </BrandChip>
             ))}
           </div>
         )}
@@ -131,6 +176,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
                   quantity={cart[product.id] ?? 0}
                   onAdd={() => addToCart(product.id)}
                   onSetQuantity={(qty) => setQuantity(product.id, qty)}
+                  onExpand={() => setExpandedProductId(product.id)}
                 />
               ))}
             </div>
@@ -157,6 +203,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
                       quantity={cart[product.id] ?? 0}
                       onAdd={() => addToCart(product.id)}
                       onSetQuantity={(qty) => setQuantity(product.id, qty)}
+                      onExpand={() => setExpandedProductId(product.id)}
                     />
                   ))}
                 </div>
@@ -202,6 +249,16 @@ export function OrderCatalog({ products }: { products: Product[] }) {
           }}
         />
       )}
+
+      {expandedProduct && (
+        <ProductDetailModal
+          product={expandedProduct}
+          quantity={cart[expandedProduct.id] ?? 0}
+          onAdd={() => addToCart(expandedProduct.id)}
+          onSetQuantity={(qty) => setQuantity(expandedProduct.id, qty)}
+          onClose={() => setExpandedProductId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -227,16 +284,41 @@ function TabButton({
   );
 }
 
-function ProductCard({
+function BrandChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold border transition-colors ${
+        active
+          ? "bg-[var(--accent)] text-white border-[var(--accent)]"
+          : "bg-white text-[#4a443c] border-[#e6e0d6]"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function AddToCartControl({
   product,
   quantity,
   onAdd,
   onSetQuantity,
+  size = "sm",
 }: {
   product: Product;
   quantity: number;
   onAdd: () => void;
   onSetQuantity: (quantity: number) => void;
+  size?: "sm" | "lg";
 }) {
   const { t } = useLocale();
   const [quantityInput, setQuantityInput] = useState(String(quantity));
@@ -252,9 +334,96 @@ function ProductCard({
     setQuantityInput(String(clamped));
   }
 
+  if (!product.inStock) {
+    return (
+      <p
+        className={`text-center font-semibold text-[#8a8177] bg-[#f2efe9] rounded-[9px] ${
+          size === "lg" ? "text-sm py-3" : "text-[11px] py-2"
+        }`}
+      >
+        {t("catalog.outOfStock")}
+      </p>
+    );
+  }
+
+  if (quantity === 0) {
+    return (
+      <button
+        onClick={onAdd}
+        className={`bg-[var(--accent)] text-white font-semibold rounded-[9px] ${
+          size === "lg" ? "w-full text-sm py-3" : "w-full text-xs py-2"
+        }`}
+      >
+        {t("catalog.addToCart")}
+      </button>
+    );
+  }
+
   return (
     <div
-      className={`border border-[#eae5dc] rounded-[14px] overflow-hidden flex flex-col bg-white ${
+      className={`flex items-center justify-between bg-[#1a1714] rounded-[9px] text-white p-[2px] ${
+        size === "lg" ? "w-full" : ""
+      }`}
+    >
+      <button
+        onClick={() => onSetQuantity(quantity - 1)}
+        aria-label="Decrease quantity"
+        className={`shrink-0 font-bold leading-none ${
+          size === "lg" ? "w-10 h-10 text-lg" : "w-[26px] h-[26px] text-base"
+        }`}
+      >
+        −
+      </button>
+      <input
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={quantityInput}
+        onChange={(e) => setQuantityInput(e.target.value.replace(/[^0-9]/g, ""))}
+        onBlur={commitQuantityInput}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+        }}
+        aria-label="Quantity"
+        className={`min-w-0 bg-transparent text-center font-semibold outline-none ${
+          size === "lg" ? "w-12 text-base" : "w-8 text-[13px]"
+        }`}
+      />
+      <button
+        onClick={() => onSetQuantity(quantity + 1)}
+        aria-label="Increase quantity"
+        className={`shrink-0 font-bold leading-none ${
+          size === "lg" ? "w-10 h-10 text-lg" : "w-[26px] h-[26px] text-base"
+        }`}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
+function ProductCard({
+  product,
+  quantity,
+  onAdd,
+  onSetQuantity,
+  onExpand,
+}: {
+  product: Product;
+  quantity: number;
+  onAdd: () => void;
+  onSetQuantity: (quantity: number) => void;
+  onExpand: () => void;
+}) {
+  return (
+    <div
+      onClick={onExpand}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onExpand();
+      }}
+      className={`border border-[#eae5dc] rounded-[14px] overflow-hidden flex flex-col bg-white cursor-pointer ${
         !product.inStock ? "opacity-[.55]" : ""
       }`}
     >
@@ -279,48 +448,97 @@ function ProductCard({
         </p>
         <p className="text-sm font-bold text-[#1a1714]">₪{product.price.toFixed(2)}</p>
 
-        {!product.inStock ? (
-          <p className="mt-auto text-[11px] font-semibold text-[#8a8177] bg-[#f2efe9] rounded-[9px] py-2 text-center">
-            {t("catalog.outOfStock")}
-          </p>
-        ) : quantity === 0 ? (
-          <button
-            onClick={onAdd}
-            className="mt-auto bg-[var(--accent)] text-white text-xs font-semibold rounded-[9px] py-2"
-          >
-            {t("catalog.addToCart")}
-          </button>
-        ) : (
-          <div className="mt-auto flex items-center justify-between bg-[#1a1714] rounded-[9px] text-white p-[2px]">
-            <button
-              onClick={() => onSetQuantity(quantity - 1)}
-              aria-label="Decrease quantity"
-              className="w-[26px] h-[26px] shrink-0 text-base font-bold leading-none"
-            >
-              −
-            </button>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={quantityInput}
-              onChange={(e) => setQuantityInput(e.target.value.replace(/[^0-9]/g, ""))}
-              onBlur={commitQuantityInput}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-              }}
-              aria-label="Quantity"
-              className="w-8 min-w-0 bg-transparent text-center text-[13px] font-semibold outline-none"
-            />
-            <button
-              onClick={() => onSetQuantity(quantity + 1)}
-              aria-label="Increase quantity"
-              className="w-[26px] h-[26px] shrink-0 text-base font-bold leading-none"
-            >
-              +
-            </button>
+        <div className="mt-auto" onClick={(e) => e.stopPropagation()}>
+          <AddToCartControl
+            product={product}
+            quantity={quantity}
+            onAdd={onAdd}
+            onSetQuantity={onSetQuantity}
+            size="sm"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProductDetailModal({
+  product,
+  quantity,
+  onAdd,
+  onSetQuantity,
+  onClose,
+}: {
+  product: Product;
+  quantity: number;
+  onAdd: () => void;
+  onSetQuantity: (quantity: number) => void;
+  onClose: () => void;
+}) {
+  const { t } = useLocale();
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-end sm:items-center sm:justify-center bg-[#1a1714]/55"
+      onClick={onClose}
+    >
+      <div
+        className="w-full sm:max-w-md bg-white rounded-t-[22px] sm:rounded-2xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="relative">
+          <div className="aspect-square bg-[#f2efe9] flex items-center justify-center overflow-hidden sm:rounded-t-2xl">
+            {product.imageUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={product.imageUrl}
+                alt={product.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="text-5xl" aria-hidden>
+                📦
+              </span>
+            )}
           </div>
-        )}
+          <button
+            onClick={onClose}
+            aria-label={t("checkout.close")}
+            className="absolute top-3 end-3 w-9 h-9 rounded-full bg-white/95 text-[#6b6259] flex items-center justify-center text-lg shadow-sm"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="p-[18px] pb-[22px]">
+          {product.brand && (
+            <p className="text-xs font-semibold text-[var(--accent)] mb-1">{product.brand}</p>
+          )}
+          <h2 className="text-lg font-bold text-[#1a1714] mb-1">{product.name}</h2>
+          <p className="text-xl font-bold text-[#1a1714] mb-2">₪{product.price.toFixed(2)}</p>
+          {product.category && (
+            <p className="text-xs text-[#8a8177] mb-2">{product.category.name}</p>
+          )}
+          {product.description && (
+            <p className="text-sm text-[#6b6259] leading-relaxed mb-4">{product.description}</p>
+          )}
+
+          <AddToCartControl
+            product={product}
+            quantity={quantity}
+            onAdd={onAdd}
+            onSetQuantity={onSetQuantity}
+            size="lg"
+          />
+        </div>
       </div>
     </div>
   );

@@ -17,6 +17,7 @@ const createProductSchema = z.object({
   description: z.string().optional(),
   price: z.number().positive(),
   imageUrl: z.string().url().optional(),
+  brand: z.string().optional(),
   inStock: z.boolean().optional(),
   categoryId: z.string().min(1).optional(),
 });
