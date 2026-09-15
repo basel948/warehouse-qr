@@ -9,7 +9,6 @@ const updateProductSchema = z.object({
   description: z.string().optional(),
   price: z.number().positive().optional(),
   imageUrl: z.string().url().optional(),
-  brand: z.string().nullable().optional(),
   inStock: z.boolean().optional(),
   categoryId: z.string().min(1).nullable().optional(),
 });

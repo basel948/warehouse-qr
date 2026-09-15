@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
+import { withCloudinaryTransform } from "@/lib/cloudinary-url";
 
 type Category = {
   id: string;
@@ -17,7 +18,6 @@ type Product = {
   description: string | null;
   price: number;
   imageUrl: string | null;
-  brand: string | null;
   inStock: boolean;
   category: Category | null;
 };
@@ -30,20 +30,27 @@ type Section = {
 };
 
 const UNCATEGORIZED_KEY = "__uncategorized";
+const SANO_KEY = "__sano";
+const SANO_BRAND_MATCH = "סנו";
+
+function startsWithLatinOrDigit(name: string): boolean {
+  return /^[A-Za-z0-9]/.test(name.trim());
+}
+
+function compareProductNames(a: Product, b: Product): number {
+  const aLatin = startsWithLatinOrDigit(a.name);
+  const bLatin = startsWithLatinOrDigit(b.name);
+  if (aLatin !== bLatin) return aLatin ? 1 : -1;
+  return a.name.localeCompare(b.name, "he");
+}
 
 export function OrderCatalog({ products }: { products: Product[] }) {
   const { t } = useLocale();
   const [cart, setCart] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState<string>("all");
-  const [activeBrand, setActiveBrand] = useState<string>("all");
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
-
-  function selectTab(key: string) {
-    setActiveTab(key);
-    setActiveBrand("all");
-  }
 
   const sections: Section[] = useMemo(() => {
     const byKey = new Map<string, Section>();
@@ -56,8 +63,20 @@ export function OrderCatalog({ products }: { products: Product[] }) {
       byKey.get(key)!.products.push(product);
     }
 
-    return Array.from(byKey.values()).sort((a, b) => a.order - b.order);
+    const allSections = Array.from(byKey.values());
+    for (const section of allSections) {
+      section.products.sort(compareProductNames);
+    }
+
+    return allSections.sort((a, b) => a.order - b.order);
   }, [products, t]);
+
+  const sanoSection: Section = useMemo(() => {
+    const sanoProducts = products
+      .filter((product) => product.name.includes(SANO_BRAND_MATCH))
+      .sort(compareProductNames);
+    return { key: SANO_KEY, name: SANO_BRAND_MATCH, order: -1, products: sanoProducts };
+  }, [products]);
 
   const isSearching = searchQuery.trim().length > 0;
 
@@ -67,27 +86,12 @@ export function OrderCatalog({ products }: { products: Product[] }) {
     return products.filter((product) => product.name.toLowerCase().includes(query));
   }, [products, searchQuery, isSearching]);
 
-  const rawVisibleSections =
-    activeTab === "all" ? sections : sections.filter((section) => section.key === activeTab);
-
-  const availableBrands = useMemo(() => {
-    if (activeTab === "all") return [];
-    const brands = new Set<string>();
-    for (const section of rawVisibleSections) {
-      for (const product of section.products) {
-        if (product.brand) brands.add(product.brand);
-      }
-    }
-    return Array.from(brands).sort();
-  }, [rawVisibleSections, activeTab]);
-
   const visibleSections =
-    activeBrand === "all"
-      ? rawVisibleSections
-      : rawVisibleSections.map((section) => ({
-          ...section,
-          products: section.products.filter((product) => product.brand === activeBrand),
-        }));
+    activeTab === "all"
+      ? sections
+      : activeTab === SANO_KEY
+        ? [sanoSection]
+        : sections.filter((section) => section.key === activeTab);
 
   const cartCount = Object.values(cart).reduce((sum, qty) => sum + qty, 0);
   const cartTotal = products.reduce(
@@ -133,33 +137,26 @@ export function OrderCatalog({ products }: { products: Product[] }) {
         </div>
         {!isSearching && (
           <div className="flex gap-2 overflow-x-auto px-4 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <TabButton active={activeTab === "all"} onClick={() => selectTab("all")}>
+            <TabButton active={activeTab === "all"} onClick={() => setActiveTab("all")}>
               {t("catalog.all")}
             </TabButton>
+            {sanoSection.products.length > 0 && (
+              <TabButton
+                active={activeTab === SANO_KEY}
+                special
+                onClick={() => setActiveTab(SANO_KEY)}
+              >
+                ⭐ {sanoSection.name}
+              </TabButton>
+            )}
             {sections.map((section) => (
               <TabButton
                 key={section.key}
                 active={activeTab === section.key}
-                onClick={() => selectTab(section.key)}
+                onClick={() => setActiveTab(section.key)}
               >
                 {section.name}
               </TabButton>
-            ))}
-          </div>
-        )}
-        {!isSearching && availableBrands.length > 0 && (
-          <div className="flex gap-1.5 overflow-x-auto px-4 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <BrandChip active={activeBrand === "all"} onClick={() => setActiveBrand("all")}>
-              {t("catalog.all")}
-            </BrandChip>
-            {availableBrands.map((brand) => (
-              <BrandChip
-                key={brand}
-                active={activeBrand === brand}
-                onClick={() => setActiveBrand(brand)}
-              >
-                {brand}
-              </BrandChip>
             ))}
           </div>
         )}
@@ -267,39 +264,21 @@ function TabButton({
   active,
   onClick,
   children,
+  special,
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
+  special?: boolean;
 }) {
+  const inactiveClass = special
+    ? "bg-amber-100 text-amber-900 border border-amber-300"
+    : "bg-[#f2efe9] text-[#4a443c]";
   return (
     <button
       onClick={onClick}
       className={`shrink-0 rounded-full px-4 py-2 text-[13px] font-semibold transition-colors ${
-        active ? "bg-[#1a1714] text-white" : "bg-[#f2efe9] text-[#4a443c]"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function BrandChip({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold border transition-colors ${
-        active
-          ? "bg-[var(--accent)] text-white border-[var(--accent)]"
-          : "bg-white text-[#4a443c] border-[#e6e0d6]"
+        active ? "bg-[#1a1714] text-white" : inactiveClass
       }`}
     >
       {children}
@@ -427,13 +406,17 @@ function ProductCard({
         !product.inStock ? "opacity-[.55]" : ""
       }`}
     >
-      <div className="aspect-square bg-[#f2efe9] flex items-center justify-center">
+      <div
+        className={`aspect-square flex items-center justify-center overflow-hidden p-2 ${
+          product.imageUrl ? "bg-white" : "bg-[#f2efe9]"
+        }`}
+      >
         {product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={product.imageUrl}
+            src={withCloudinaryTransform(product.imageUrl, "q_auto")}
             alt={product.name}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain"
           />
         ) : (
           <span className="text-xl" aria-hidden>
@@ -495,13 +478,17 @@ function ProductDetailModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative">
-          <div className="aspect-square bg-[#f2efe9] flex items-center justify-center overflow-hidden sm:rounded-t-2xl">
+          <div
+            className={`aspect-square flex items-center justify-center overflow-hidden p-6 sm:rounded-t-2xl ${
+              product.imageUrl ? "bg-white" : "bg-[#f2efe9]"
+            }`}
+          >
             {product.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={product.imageUrl}
+                src={withCloudinaryTransform(product.imageUrl, "q_auto:best,e_sharpen:60")}
                 alt={product.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain"
               />
             ) : (
               <span className="text-5xl" aria-hidden>
@@ -519,9 +506,6 @@ function ProductDetailModal({
         </div>
 
         <div className="p-[18px] pb-[22px]">
-          {product.brand && (
-            <p className="text-xs font-semibold text-[var(--accent)] mb-1">{product.brand}</p>
-          )}
           <h2 className="text-lg font-bold text-[#1a1714] mb-1">{product.name}</h2>
           <p className="text-xl font-bold text-[#1a1714] mb-2">₪{product.price.toFixed(2)}</p>
           {product.category && (

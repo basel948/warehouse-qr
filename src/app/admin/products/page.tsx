@@ -16,7 +16,6 @@ type Product = {
   description: string | null;
   price: number;
   imageUrl: string | null;
-  brand: string | null;
   inStock: boolean;
   categoryId: string | null;
   category: Category | null;
@@ -32,7 +31,6 @@ export default function AdminProductsPage() {
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [imageUrl, setImageUrl] = useState("");
-  const [brand, setBrand] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -46,7 +44,6 @@ export default function AdminProductsPage() {
   const [editDescription, setEditDescription] = useState("");
   const [editPrice, setEditPrice] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
-  const [editBrand, setEditBrand] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
   async function loadAll() {
@@ -115,7 +112,6 @@ export default function AdminProductsPage() {
         description: description || undefined,
         price: parsedPrice,
         imageUrl: imageUrl || undefined,
-        brand: brand || undefined,
         categoryId: categoryId || undefined,
       }),
     });
@@ -129,7 +125,6 @@ export default function AdminProductsPage() {
     setDescription("");
     setPrice("");
     setImageUrl("");
-    setBrand("");
     setCategoryId("");
     loadAll();
   }
@@ -140,7 +135,6 @@ export default function AdminProductsPage() {
     setEditDescription(product.description ?? "");
     setEditPrice(String(product.price));
     setEditImageUrl(product.imageUrl ?? "");
-    setEditBrand(product.brand ?? "");
     setEditError(null);
   }
 
@@ -166,7 +160,6 @@ export default function AdminProductsPage() {
         description: editDescription || undefined,
         price: parsedPrice,
         imageUrl: editImageUrl || undefined,
-        brand: editBrand || null,
       }),
     });
 
@@ -295,22 +288,13 @@ export default function AdminProductsPage() {
               className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_160px] gap-2.5">
-            <input
-              type="text"
-              placeholder={t("admin.products.descriptionPlaceholder")}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
-            />
-            <input
-              type="text"
-              placeholder={t("admin.products.brandPlaceholder")}
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-              className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
-            />
-          </div>
+          <input
+            type="text"
+            placeholder={t("admin.products.descriptionPlaceholder")}
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            className="w-full border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
+          />
           <div className="flex items-center gap-3.5 flex-wrap">
             <ImageUploadField
               value={imageUrl}
@@ -379,22 +363,13 @@ export default function AdminProductsPage() {
                           className="w-24 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
                         />
                       </div>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder={t("admin.products.descriptionPlaceholder")}
-                          value={editDescription}
-                          onChange={(e) => setEditDescription(e.target.value)}
-                          className="flex-1 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
-                        />
-                        <input
-                          type="text"
-                          placeholder={t("admin.products.brandPlaceholder")}
-                          value={editBrand}
-                          onChange={(e) => setEditBrand(e.target.value)}
-                          className="w-40 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
-                        />
-                      </div>
+                      <input
+                        type="text"
+                        placeholder={t("admin.products.descriptionPlaceholder")}
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        className="w-full border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+                      />
                       <ImageUploadField
                         value={editImageUrl}
                         onChange={setEditImageUrl}
@@ -447,12 +422,7 @@ export default function AdminProductsPage() {
                           📦
                         </div>
                       )}
-                      <div className="min-w-0">
-                        <span className="block text-[#1a1714] truncate">{product.name}</span>
-                        {product.brand && (
-                          <span className="block text-xs text-[#a39a8e] truncate">{product.brand}</span>
-                        )}
-                      </div>
+                      <span className="text-[#1a1714] truncate">{product.name}</span>
                     </div>
                     <select
                       value={product.categoryId ?? ""}

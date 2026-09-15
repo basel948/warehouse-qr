@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET() {
   const products = await prisma.product.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: { name: "asc" },
     include: { category: true },
   });
   return NextResponse.json(products);
@@ -17,7 +17,6 @@ const createProductSchema = z.object({
   description: z.string().optional(),
   price: z.number().positive(),
   imageUrl: z.string().url().optional(),
-  brand: z.string().optional(),
   inStock: z.boolean().optional(),
   categoryId: z.string().min(1).optional(),
 });

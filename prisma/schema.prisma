@@ -31,7 +31,6 @@ model Product {
   description String?
   price       Float
   imageUrl    String?
-  brand       String?
   inStock     Boolean     @default(true)
   category    Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   categoryId  String?
