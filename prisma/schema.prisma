@@ -18,25 +18,40 @@ model Admin {
 }
 
 model Category {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  order     Int       @default(0)
-  createdAt DateTime  @default(now())
-  products  Product[]
+  id            String        @id @default(cuid())
+  name          String        @unique
+  order         Int           @default(0)
+  createdAt     DateTime      @default(now())
+  products      Product[]
+  subcategories Subcategory[]
+}
+
+model Subcategory {
+  id         String    @id @default(cuid())
+  name       String
+  order      Int       @default(0)
+  category   Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  categoryId String
+  createdAt  DateTime  @default(now())
+  products   Product[]
+
+  @@unique([categoryId, name])
 }
 
 model Product {
-  id          String      @id @default(cuid())
-  name        String
-  description String?
-  price       Float
-  imageUrl    String?
-  inStock     Boolean     @default(true)
-  category    Category?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  categoryId  String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  orderItems  OrderItem[]
+  id            String       @id @default(cuid())
+  name          String
+  description   String?
+  price         Float
+  imageUrl      String?
+  inStock       Boolean      @default(true)
+  category      Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryId    String?
+  subcategory   Subcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
+  subcategoryId String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  orderItems    OrderItem[]
 }
 
 model Coupon {

@@ -12,6 +12,12 @@ type Category = {
   order: number;
 };
 
+type Subcategory = {
+  id: string;
+  name: string;
+  order: number;
+};
+
 type Product = {
   id: string;
   name: string;
@@ -20,13 +26,21 @@ type Product = {
   imageUrl: string | null;
   inStock: boolean;
   category: Category | null;
+  subcategory: Subcategory | null;
+};
+
+type SubSection = {
+  key: string;
+  name: string | null;
+  order: number;
+  products: Product[];
 };
 
 type Section = {
   key: string;
   name: string;
   order: number;
-  products: Product[];
+  subSections: SubSection[];
 };
 
 const UNCATEGORIZED_KEY = "__uncategorized";
@@ -53,29 +67,58 @@ export function OrderCatalog({ products }: { products: Product[] }) {
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
 
   const sections: Section[] = useMemo(() => {
-    const byKey = new Map<string, Section>();
+    const byKey = new Map<
+      string,
+      { key: string; name: string; order: number; subMap: Map<string, SubSection> }
+    >();
 
     for (const product of products) {
       const key = product.category?.id ?? UNCATEGORIZED_KEY;
       const name = product.category?.name ?? t("catalog.otherCategory");
       const order = product.category?.order ?? Number.MAX_SAFE_INTEGER;
-      if (!byKey.has(key)) byKey.set(key, { key, name, order, products: [] });
-      byKey.get(key)!.products.push(product);
+      if (!byKey.has(key)) byKey.set(key, { key, name, order, subMap: new Map() });
+      const category = byKey.get(key)!;
+
+      const subKey = product.subcategory?.id ?? UNCATEGORIZED_KEY;
+      const subName = product.subcategory?.name ?? null;
+      const subOrder = product.subcategory?.order ?? Number.MAX_SAFE_INTEGER;
+      if (!category.subMap.has(subKey)) {
+        category.subMap.set(subKey, { key: subKey, name: subName, order: subOrder, products: [] });
+      }
+      category.subMap.get(subKey)!.products.push(product);
     }
 
-    const allSections = Array.from(byKey.values());
-    for (const section of allSections) {
-      section.products.sort(compareProductNames);
-    }
+    return Array.from(byKey.values())
+      .map((category) => {
+        const subSections = Array.from(category.subMap.values());
+        for (const subSection of subSections) subSection.products.sort(compareProductNames);
+        subSections.sort((a, b) => a.order - b.order);
 
-    return allSections.sort((a, b) => a.order - b.order);
+        // Only label the "no subcategory" bucket when this category actually
+        // uses subcategories elsewhere; otherwise leave it header-less so
+        // categories that don't use subcategories render as before.
+        const hasNamedSubSection = subSections.some((sub) => sub.name !== null);
+        if (hasNamedSubSection) {
+          for (const sub of subSections) {
+            if (sub.name === null) sub.name = t("catalog.otherCategory");
+          }
+        }
+
+        return { key: category.key, name: category.name, order: category.order, subSections };
+      })
+      .sort((a, b) => a.order - b.order);
   }, [products, t]);
 
   const sanoSection: Section = useMemo(() => {
     const sanoProducts = products
       .filter((product) => product.name.includes(SANO_BRAND_MATCH))
       .sort(compareProductNames);
-    return { key: SANO_KEY, name: SANO_BRAND_MATCH, order: -1, products: sanoProducts };
+    return {
+      key: SANO_KEY,
+      name: SANO_BRAND_MATCH,
+      order: -1,
+      subSections: [{ key: "all", name: null, order: 0, products: sanoProducts }],
+    };
   }, [products]);
 
   const isSearching = searchQuery.trim().length > 0;
@@ -140,7 +183,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
             <TabButton active={activeTab === "all"} onClick={() => setActiveTab("all")}>
               {t("catalog.all")}
             </TabButton>
-            {sanoSection.products.length > 0 && (
+            {sanoSection.subSections[0].products.length > 0 && (
               <TabButton
                 active={activeTab === SANO_KEY}
                 special
@@ -192,22 +235,31 @@ export function OrderCatalog({ products }: { products: Product[] }) {
                     {section.name}
                   </h2>
                 )}
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
-                  {section.products.map((product) => (
-                    <ProductCard
-                      key={product.id}
-                      product={product}
-                      quantity={cart[product.id] ?? 0}
-                      onAdd={() => addToCart(product.id)}
-                      onSetQuantity={(qty) => setQuantity(product.id, qty)}
-                      onExpand={() => setExpandedProductId(product.id)}
-                    />
-                  ))}
-                </div>
+                {section.subSections.map((subSection) => (
+                  <div key={subSection.key} className="mb-5 last:mb-0">
+                    {subSection.name && (
+                      <h3 className="text-[13px] font-semibold text-[#6b6259] mb-2">
+                        {subSection.name}
+                      </h3>
+                    )}
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
+                      {subSection.products.map((product) => (
+                        <ProductCard
+                          key={product.id}
+                          product={product}
+                          quantity={cart[product.id] ?? 0}
+                          onAdd={() => addToCart(product.id)}
+                          onSetQuantity={(qty) => setQuantity(product.id, qty)}
+                          onExpand={() => setExpandedProductId(product.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </section>
             ))}
 
-            {visibleSections.every((s) => s.products.length === 0) && (
+            {visibleSections.every((s) => s.subSections.every((sub) => sub.products.length === 0)) && (
               <p className="text-sm text-[#8a8177] py-8 text-center">
                 {t("catalog.noProductsInCategory")}
               </p>
@@ -509,7 +561,10 @@ function ProductDetailModal({
           <h2 className="text-lg font-bold text-[#1a1714] mb-1">{product.name}</h2>
           <p className="text-xl font-bold text-[#1a1714] mb-2">₪{product.price.toFixed(2)}</p>
           {product.category && (
-            <p className="text-xs text-[#8a8177] mb-2">{product.category.name}</p>
+            <p className="text-xs text-[#8a8177] mb-2">
+              {product.category.name}
+              {product.subcategory ? ` · ${product.subcategory.name}` : ""}
+            </p>
           )}
           {product.description && (
             <p className="text-sm text-[#6b6259] leading-relaxed mb-4">{product.description}</p>

@@ -10,6 +10,13 @@ type Category = {
   order: number;
 };
 
+type Subcategory = {
+  id: string;
+  name: string;
+  order: number;
+  categoryId: string;
+};
+
 type Product = {
   id: string;
   name: string;
@@ -19,12 +26,15 @@ type Product = {
   inStock: boolean;
   categoryId: string | null;
   category: Category | null;
+  subcategoryId: string | null;
+  subcategory: Subcategory | null;
 };
 
 export default function AdminProductsPage() {
   const { t } = useLocale();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [name, setName] = useState("");
@@ -32,10 +42,15 @@ export default function AdminProductsPage() {
   const [price, setPrice] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [subcategoryId, setSubcategoryId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [categoryError, setCategoryError] = useState<string | null>(null);
+
+  const [subcatManagerCategoryId, setSubcatManagerCategoryId] = useState("");
+  const [newSubcategoryName, setNewSubcategoryName] = useState("");
+  const [subcategoryError, setSubcategoryError] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -48,16 +63,19 @@ export default function AdminProductsPage() {
 
   async function loadAll() {
     setLoading(true);
-    const [productsRes, categoriesRes] = await Promise.all([
+    const [productsRes, categoriesRes, subcategoriesRes] = await Promise.all([
       fetch("/api/products"),
       fetch("/api/categories"),
+      fetch("/api/subcategories"),
     ]);
-    const [productsData, categoriesData] = await Promise.all([
+    const [productsData, categoriesData, subcategoriesData] = await Promise.all([
       productsRes.json(),
       categoriesRes.json(),
+      subcategoriesRes.json(),
     ]);
     setProducts(productsData);
     setCategories(categoriesData);
+    setSubcategories(subcategoriesData);
     setLoading(false);
   }
 
@@ -94,6 +112,47 @@ export default function AdminProductsPage() {
     loadAll();
   }
 
+  const subcategoriesForManager = subcategories.filter(
+    (subcategory) => subcategory.categoryId === subcatManagerCategoryId
+  );
+
+  async function addSubcategory(e: React.FormEvent) {
+    e.preventDefault();
+    setSubcategoryError(null);
+
+    if (!subcatManagerCategoryId) {
+      setSubcategoryError(t("admin.products.subcategoryCategoryRequired"));
+      return;
+    }
+    if (!newSubcategoryName.trim()) {
+      setSubcategoryError(t("admin.products.subcategoryNameRequired"));
+      return;
+    }
+
+    const res = await fetch("/api/subcategories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: newSubcategoryName.trim(),
+        categoryId: subcatManagerCategoryId,
+        order: subcategoriesForManager.length,
+      }),
+    });
+
+    if (!res.ok) {
+      setSubcategoryError(t("admin.products.subcategoryError"));
+      return;
+    }
+
+    setNewSubcategoryName("");
+    loadAll();
+  }
+
+  async function deleteSubcategory(id: string) {
+    await fetch(`/api/subcategories/${id}`, { method: "DELETE" });
+    loadAll();
+  }
+
   async function addProduct(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -113,6 +172,7 @@ export default function AdminProductsPage() {
         price: parsedPrice,
         imageUrl: imageUrl || undefined,
         categoryId: categoryId || undefined,
+        subcategoryId: subcategoryId || undefined,
       }),
     });
 
@@ -126,6 +186,7 @@ export default function AdminProductsPage() {
     setPrice("");
     setImageUrl("");
     setCategoryId("");
+    setSubcategoryId("");
     loadAll();
   }
 
@@ -173,10 +234,21 @@ export default function AdminProductsPage() {
   }
 
   async function setProductCategory(product: Product, newCategoryId: string) {
+    // Clear subcategory too when the category changes, since a subcategory
+    // only makes sense under the category it was created for.
     await fetch(`/api/products/${product.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ categoryId: newCategoryId || null }),
+      body: JSON.stringify({ categoryId: newCategoryId || null, subcategoryId: null }),
+    });
+    loadAll();
+  }
+
+  async function setProductSubcategory(product: Product, newSubcategoryId: string) {
+    await fetch(`/api/products/${product.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subcategoryId: newSubcategoryId || null }),
     });
     loadAll();
   }
@@ -244,6 +316,64 @@ export default function AdminProductsPage() {
 
       <div>
         <h1 className="text-xl font-bold text-[#1a1714] mb-4">
+          {t("admin.products.subcategoriesTitle")}
+        </h1>
+
+        <select
+          value={subcatManagerCategoryId}
+          onChange={(e) => setSubcatManagerCategoryId(e.target.value)}
+          className="border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5 mb-3 w-full sm:w-auto"
+        >
+          <option value="">{t("admin.products.subcategoryManagerPlaceholder")}</option>
+          {categories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
+        </select>
+
+        {subcatManagerCategoryId && (
+          <>
+            <form onSubmit={addSubcategory} className="flex gap-2 mb-3">
+              <input
+                type="text"
+                placeholder={t("admin.products.newSubcategoryPlaceholder")}
+                value={newSubcategoryName}
+                onChange={(e) => setNewSubcategoryName(e.target.value)}
+                className="flex-1 border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5"
+              />
+              <button
+                type="submit"
+                className="bg-[var(--accent)] text-white rounded-[10px] px-4 py-2.5 text-sm font-semibold"
+              >
+                {t("admin.products.add")}
+              </button>
+            </form>
+            {subcategoryError && <p className="text-sm text-[#b3402e] mb-3">{subcategoryError}</p>}
+
+            <ul className="flex flex-wrap gap-2">
+              {subcategoriesForManager.map((subcategory) => (
+                <li
+                  key={subcategory.id}
+                  className="flex items-center gap-2 border border-[#e6e0d6] bg-white rounded-full ps-3.5 pe-1.5 py-1.5 text-[13px]"
+                >
+                  {subcategory.name}
+                  <button
+                    onClick={() => deleteSubcategory(subcategory.id)}
+                    aria-label={t("admin.products.deleteCategoryAria", { name: subcategory.name })}
+                    className="text-[#a39a8e] hover:text-[#b3402e] rounded-full w-5 h-5 leading-none"
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+
+      <div>
+        <h1 className="text-xl font-bold text-[#1a1714] mb-4">
           {t("admin.products.productsTitle")}
         </h1>
 
@@ -269,7 +399,10 @@ export default function AdminProductsPage() {
             />
             <select
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              onChange={(e) => {
+                setCategoryId(e.target.value);
+                setSubcategoryId("");
+              }}
               className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
             >
               <option value="">{t("admin.products.noCategoryOption")}</option>
@@ -288,6 +421,22 @@ export default function AdminProductsPage() {
               className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
             />
           </div>
+          {categoryId && subcategories.some((s) => s.categoryId === categoryId) && (
+            <select
+              value={subcategoryId}
+              onChange={(e) => setSubcategoryId(e.target.value)}
+              className="w-full border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
+            >
+              <option value="">{t("admin.products.noSubcategoryOption")}</option>
+              {subcategories
+                .filter((s) => s.categoryId === categoryId)
+                .map((subcategory) => (
+                  <option key={subcategory.id} value={subcategory.id}>
+                    {subcategory.name}
+                  </option>
+                ))}
+            </select>
+          )}
           <input
             type="text"
             placeholder={t("admin.products.descriptionPlaceholder")}
@@ -329,9 +478,10 @@ export default function AdminProductsPage() {
           </p>
         ) : (
           <div className="bg-white border border-[#eae5dc] rounded-[14px] overflow-hidden">
-            <div className="hidden sm:grid grid-cols-[1fr_150px_110px_150px] gap-4 px-[18px] py-[11px] bg-[#faf8f5] border-b border-[#eae5dc] text-xs font-semibold text-[#8a8177]">
+            <div className="hidden sm:grid grid-cols-[1fr_140px_140px_100px_150px] gap-4 px-[18px] py-[11px] bg-[#faf8f5] border-b border-[#eae5dc] text-xs font-semibold text-[#8a8177]">
               <span>{t("admin.products.colProduct")}</span>
               <span>{t("admin.products.colCategory")}</span>
+              <span>{t("admin.products.colSubcategory")}</span>
               <span>{t("admin.products.colPrice")}</span>
               <span />
             </div>
@@ -404,7 +554,7 @@ export default function AdminProductsPage() {
                 ) : (
                   <li
                     key={product.id}
-                    className="grid grid-cols-1 sm:grid-cols-[1fr_150px_110px_150px] gap-2 sm:gap-4 items-center px-[18px] py-3.5 text-sm"
+                    className="grid grid-cols-1 sm:grid-cols-[1fr_140px_140px_100px_150px] gap-2 sm:gap-4 items-center px-[18px] py-3.5 text-sm"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       {product.imageUrl ? (
@@ -435,6 +585,21 @@ export default function AdminProductsPage() {
                           {category.name}
                         </option>
                       ))}
+                    </select>
+                    <select
+                      value={product.subcategoryId ?? ""}
+                      onChange={(e) => setProductSubcategory(product, e.target.value)}
+                      disabled={!product.categoryId}
+                      className="border border-[#e6e0d6] rounded-[9px] px-2.5 py-1.5 text-sm bg-white disabled:opacity-50"
+                    >
+                      <option value="">{t("admin.products.noSubcategoryOption")}</option>
+                      {subcategories
+                        .filter((s) => s.categoryId === product.categoryId)
+                        .map((subcategory) => (
+                          <option key={subcategory.id} value={subcategory.id}>
+                            {subcategory.name}
+                          </option>
+                        ))}
                     </select>
                     <span className="text-[#1a1714] font-semibold">₪{product.price.toFixed(2)}</span>
                     <div className="flex items-center gap-2.5 flex-wrap">
