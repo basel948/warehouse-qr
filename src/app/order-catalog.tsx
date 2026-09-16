@@ -65,7 +65,26 @@ export function OrderCatalog({ products }: { products: Product[] }) {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+  const [priceFilterOpen, setPriceFilterOpen] = useState(false);
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
   const subSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const priceFilterActive = minPrice.trim() !== "" || maxPrice.trim() !== "";
+
+  // Cart/checkout always operate on the full product list — filtering only
+  // changes what's displayed, never what's already in the cart.
+  const displayedProducts = useMemo(() => {
+    if (!priceFilterActive) return products;
+    const min = minPrice.trim() !== "" ? Number(minPrice) : -Infinity;
+    const max = maxPrice.trim() !== "" ? Number(maxPrice) : Infinity;
+    return products.filter((product) => product.price >= min && product.price <= max);
+  }, [products, minPrice, maxPrice, priceFilterActive]);
+
+  function clearPriceFilter() {
+    setMinPrice("");
+    setMaxPrice("");
+  }
 
   const sections: Section[] = useMemo(() => {
     const byKey = new Map<
@@ -73,7 +92,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
       { key: string; name: string; order: number; subMap: Map<string, SubSection> }
     >();
 
-    for (const product of products) {
+    for (const product of displayedProducts) {
       const key = product.category?.id ?? UNCATEGORIZED_KEY;
       const name = product.category?.name ?? t("catalog.otherCategory");
       const order = product.category?.order ?? Number.MAX_SAFE_INTEGER;
@@ -108,10 +127,10 @@ export function OrderCatalog({ products }: { products: Product[] }) {
         return { key: category.key, name: category.name, order: category.order, subSections };
       })
       .sort((a, b) => a.order - b.order);
-  }, [products, t]);
+  }, [displayedProducts, t]);
 
   const sanoSection: Section = useMemo(() => {
-    const sanoProducts = products
+    const sanoProducts = displayedProducts
       .filter((product) => product.name.includes(SANO_BRAND_MATCH))
       .sort(compareProductNames);
     return {
@@ -120,15 +139,15 @@ export function OrderCatalog({ products }: { products: Product[] }) {
       order: -1,
       subSections: [{ key: "all", name: null, order: 0, products: sanoProducts }],
     };
-  }, [products]);
+  }, [displayedProducts]);
 
   const isSearching = searchQuery.trim().length > 0;
 
   const searchResults = useMemo(() => {
     if (!isSearching) return [];
     const query = searchQuery.trim().toLowerCase();
-    return products.filter((product) => product.name.toLowerCase().includes(query));
-  }, [products, searchQuery, isSearching]);
+    return displayedProducts.filter((product) => product.name.toLowerCase().includes(query));
+  }, [displayedProducts, searchQuery, isSearching]);
 
   const visibleSections =
     activeTab === "all"
@@ -177,18 +196,60 @@ export function OrderCatalog({ products }: { products: Product[] }) {
             <BrandLogo />
             <LanguageSwitcher />
           </div>
-          <div className="relative">
-            <span className="absolute start-3.5 top-1/2 -translate-y-1/2 text-[#a39a8e]" aria-hidden>
-              🔍
-            </span>
-            <input
-              type="search"
-              placeholder={t("catalog.searchPlaceholder")}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full border border-[#e6e0d6] rounded-xl ps-9 pe-3 py-2.5 text-sm bg-[#f4f1ec] placeholder:text-[#a39a8e]"
-            />
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <span className="absolute start-3.5 top-1/2 -translate-y-1/2 text-[#a39a8e]" aria-hidden>
+                🔍
+              </span>
+              <input
+                type="search"
+                placeholder={t("catalog.searchPlaceholder")}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full border border-[#e6e0d6] rounded-xl ps-9 pe-3 py-2.5 text-sm bg-[#f4f1ec] placeholder:text-[#a39a8e]"
+              />
+            </div>
+            <button
+              onClick={() => setPriceFilterOpen((open) => !open)}
+              aria-label={t("catalog.priceFilter")}
+              className={`shrink-0 rounded-xl px-3.5 py-2.5 text-sm font-semibold border ${
+                priceFilterOpen || priceFilterActive
+                  ? "bg-[#1a1714] text-white border-[#1a1714]"
+                  : "bg-[#f4f1ec] text-[#4a443c] border-[#e6e0d6]"
+              }`}
+            >
+              ₪{priceFilterActive ? " •" : ""}
+            </button>
           </div>
+          {priceFilterOpen && (
+            <div className="flex items-center gap-2 mt-2.5">
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder={t("catalog.priceMinPlaceholder")}
+                value={minPrice}
+                onChange={(e) => setMinPrice(e.target.value)}
+                className="w-0 flex-1 border border-[#e6e0d6] rounded-xl px-3 py-2 text-sm bg-[#f4f1ec] placeholder:text-[#a39a8e]"
+              />
+              <span className="text-[#a39a8e] text-sm shrink-0">—</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder={t("catalog.priceMaxPlaceholder")}
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+                className="w-0 flex-1 border border-[#e6e0d6] rounded-xl px-3 py-2 text-sm bg-[#f4f1ec] placeholder:text-[#a39a8e]"
+              />
+              {priceFilterActive && (
+                <button
+                  onClick={clearPriceFilter}
+                  className="shrink-0 text-[13px] text-[#6b6259] underline"
+                >
+                  {t("catalog.priceClear")}
+                </button>
+              )}
+            </div>
+          )}
         </div>
         {!isSearching && (
           <div className="flex gap-2 overflow-x-auto px-4 pb-3 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
