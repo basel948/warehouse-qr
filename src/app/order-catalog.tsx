@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
@@ -65,6 +65,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
+  const subSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const sections: Section[] = useMemo(() => {
     const byKey = new Map<
@@ -135,6 +136,17 @@ export function OrderCatalog({ products }: { products: Product[] }) {
       : activeTab === SANO_KEY
         ? [sanoSection]
         : sections.filter((section) => section.key === activeTab);
+
+  // Only offer quick-jump shortcuts when viewing a single category that's
+  // actually broken into more than one named subcategory.
+  const quickJumpSubSections =
+    activeTab !== "all" && activeTab !== SANO_KEY && visibleSections[0]?.subSections.some((s) => s.name)
+      ? visibleSections[0].subSections
+      : [];
+
+  function scrollToSubSection(key: string) {
+    subSectionRefs.current[key]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const cartCount = Object.values(cart).reduce((sum, qty) => sum + qty, 0);
   const cartTotal = products.reduce(
@@ -228,6 +240,35 @@ export function OrderCatalog({ products }: { products: Product[] }) {
           </>
         ) : (
           <>
+            {quickJumpSubSections.length > 0 && (
+              <div className="flex gap-3.5 overflow-x-auto pb-5 mb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {quickJumpSubSections.map((subSection) => (
+                  <button
+                    key={subSection.key}
+                    onClick={() => scrollToSubSection(subSection.key)}
+                    className="shrink-0 flex flex-col items-center gap-1.5 w-16"
+                  >
+                    <span className="w-14 h-14 rounded-full border border-[#eae5dc] bg-white overflow-hidden flex items-center justify-center shrink-0">
+                      {subSection.products[0]?.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={withCloudinaryTransform(subSection.products[0].imageUrl, "q_auto")}
+                          alt=""
+                          className="w-full h-full object-contain p-1.5"
+                        />
+                      ) : (
+                        <span className="text-xl" aria-hidden>
+                          📦
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-[11px] text-center leading-tight text-[#4a443c] line-clamp-2">
+                      {subSection.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
             {visibleSections.map((section) => (
               <section key={section.key} className="mb-7">
                 {activeTab === "all" && (
@@ -236,7 +277,13 @@ export function OrderCatalog({ products }: { products: Product[] }) {
                   </h2>
                 )}
                 {section.subSections.map((subSection) => (
-                  <div key={subSection.key} className="mb-5 last:mb-0">
+                  <div
+                    key={subSection.key}
+                    ref={(el) => {
+                      subSectionRefs.current[subSection.key] = el;
+                    }}
+                    className="mb-5 last:mb-0 scroll-mt-36"
+                  >
                     {subSection.name && (
                       <h3 className="text-[13px] font-semibold text-[#6b6259] mb-2">
                         {subSection.name}
