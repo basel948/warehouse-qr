@@ -47,6 +47,8 @@ const UNCATEGORIZED_KEY = "__uncategorized";
 const SANO_KEY = "__sano";
 const SANO_BRAND_MATCH = "סנו";
 
+type SortMode = "name-asc" | "name-desc" | "price-asc" | "price-desc";
+
 function startsWithLatinOrDigit(name: string): boolean {
   return /^[A-Za-z0-9]/.test(name.trim());
 }
@@ -56,6 +58,20 @@ function compareProductNames(a: Product, b: Product): number {
   const bLatin = startsWithLatinOrDigit(b.name);
   if (aLatin !== bLatin) return aLatin ? 1 : -1;
   return a.name.localeCompare(b.name, "he");
+}
+
+function makeProductComparator(sortMode: SortMode): (a: Product, b: Product) => number {
+  switch (sortMode) {
+    case "name-desc":
+      return (a, b) => -compareProductNames(a, b);
+    case "price-asc":
+      return (a, b) => a.price - b.price;
+    case "price-desc":
+      return (a, b) => b.price - a.price;
+    case "name-asc":
+    default:
+      return compareProductNames;
+  }
 }
 
 export function OrderCatalog({ products }: { products: Product[] }) {
@@ -68,7 +84,10 @@ export function OrderCatalog({ products }: { products: Product[] }) {
   const [priceFilterOpen, setPriceFilterOpen] = useState(false);
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
+  const [sortMode, setSortMode] = useState<SortMode>("name-asc");
   const subSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  const compareProducts = useMemo(() => makeProductComparator(sortMode), [sortMode]);
 
   const priceFilterActive = minPrice.trim() !== "" || maxPrice.trim() !== "";
 
@@ -111,7 +130,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
     return Array.from(byKey.values())
       .map((category) => {
         const subSections = Array.from(category.subMap.values());
-        for (const subSection of subSections) subSection.products.sort(compareProductNames);
+        for (const subSection of subSections) subSection.products.sort(compareProducts);
         subSections.sort((a, b) => a.order - b.order);
 
         // Only label the "no subcategory" bucket when this category actually
@@ -127,27 +146,29 @@ export function OrderCatalog({ products }: { products: Product[] }) {
         return { key: category.key, name: category.name, order: category.order, subSections };
       })
       .sort((a, b) => a.order - b.order);
-  }, [displayedProducts, t]);
+  }, [displayedProducts, t, compareProducts]);
 
   const sanoSection: Section = useMemo(() => {
     const sanoProducts = displayedProducts
       .filter((product) => product.name.includes(SANO_BRAND_MATCH))
-      .sort(compareProductNames);
+      .sort(compareProducts);
     return {
       key: SANO_KEY,
       name: SANO_BRAND_MATCH,
       order: -1,
       subSections: [{ key: "all", name: null, order: 0, products: sanoProducts }],
     };
-  }, [displayedProducts]);
+  }, [displayedProducts, compareProducts]);
 
   const isSearching = searchQuery.trim().length > 0;
 
   const searchResults = useMemo(() => {
     if (!isSearching) return [];
     const query = searchQuery.trim().toLowerCase();
-    return displayedProducts.filter((product) => product.name.toLowerCase().includes(query));
-  }, [displayedProducts, searchQuery, isSearching]);
+    return displayedProducts
+      .filter((product) => product.name.toLowerCase().includes(query))
+      .sort(compareProducts);
+  }, [displayedProducts, searchQuery, isSearching, compareProducts]);
 
   const visibleSections =
     activeTab === "all"
@@ -220,6 +241,17 @@ export function OrderCatalog({ products }: { products: Product[] }) {
             >
               ₪{priceFilterActive ? " •" : ""}
             </button>
+            <select
+              value={sortMode}
+              onChange={(e) => setSortMode(e.target.value as SortMode)}
+              aria-label={t("catalog.sortLabel")}
+              className="shrink-0 max-w-[104px] border border-[#e6e0d6] rounded-xl px-2.5 py-2.5 text-sm bg-[#f4f1ec] text-[#4a443c]"
+            >
+              <option value="name-asc">{t("catalog.sortNameAsc")}</option>
+              <option value="name-desc">{t("catalog.sortNameDesc")}</option>
+              <option value="price-asc">{t("catalog.sortPriceAsc")}</option>
+              <option value="price-desc">{t("catalog.sortPriceDesc")}</option>
+            </select>
           </div>
           {priceFilterOpen && (
             <div className="flex items-center gap-2 mt-2.5">
