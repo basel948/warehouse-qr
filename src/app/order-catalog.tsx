@@ -378,9 +378,12 @@ export function OrderCatalog({ products }: { products: Product[] }) {
                     className="mb-5 last:mb-0 scroll-mt-36"
                   >
                     {subSection.name && (
-                      <h3 className="text-[13px] font-semibold text-[#6b6259] mb-2">
-                        {subSection.name}
-                      </h3>
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <h3 className="text-[13px] font-semibold text-[#6b6259] shrink-0">
+                          {subSection.name}
+                        </h3>
+                        <div className="flex-1 h-px bg-[#c9c1b6]" aria-hidden />
+                      </div>
                     )}
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
                       {subSection.products.map((product) => (
