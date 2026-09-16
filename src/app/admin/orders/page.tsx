@@ -13,9 +13,11 @@ type OrderItem = {
 type Order = {
   id: string;
   customerName: string;
+  businessName: string;
   customerPhone: string;
   status: string;
   whatsappSentAt: string | null;
+  emailSentAt: string | null;
   couponCode: string | null;
   discountPercent: number | null;
   createdAt: string;
@@ -111,6 +113,9 @@ export default function AdminOrdersPage() {
               <div className="flex items-start justify-between gap-4 mb-3.5">
                 <div>
                   <p className="font-semibold text-[15px] text-[#1a1714]">{order.customerName}</p>
+                  {order.businessName && (
+                    <p className="text-[13px] text-[#6b6259]">{order.businessName}</p>
+                  )}
                   <p className="text-[13px] text-[#6b6259]">{order.customerPhone}</p>
                 </div>
                 <div className="flex items-center gap-3">
@@ -163,11 +168,18 @@ export default function AdminOrdersPage() {
               </div>
 
               <div className="flex items-center justify-between mt-3.5">
-                <span className={`text-xs ${order.whatsappSentAt ? "text-[#2f6b3a]" : "text-[#8a5a06]"}`}>
-                  {order.whatsappSentAt
-                    ? `✓ ${t("admin.orders.whatsappSent")}`
-                    : t("admin.orders.whatsappNotSent")}
-                </span>
+                <div className="flex flex-col gap-0.5">
+                  <span className={`text-xs ${order.whatsappSentAt ? "text-[#2f6b3a]" : "text-[#8a5a06]"}`}>
+                    {order.whatsappSentAt
+                      ? `✓ ${t("admin.orders.whatsappSent")}`
+                      : t("admin.orders.whatsappNotSent")}
+                  </span>
+                  <span className={`text-xs ${order.emailSentAt ? "text-[#2f6b3a]" : "text-[#8a5a06]"}`}>
+                    {order.emailSentAt
+                      ? `✓ ${t("admin.orders.emailSent")}`
+                      : t("admin.orders.emailNotSent")}
+                  </span>
+                </div>
                 <span className="text-base font-bold text-[#1a1714]">
                   {t("admin.orders.total", { amount: total.toFixed(2) })}
                 </span>

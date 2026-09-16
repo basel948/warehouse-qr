@@ -65,9 +65,11 @@ model Coupon {
 model Order {
   id              String      @id @default(cuid())
   customerName    String
+  businessName    String      @default("")
   customerPhone   String
   status          String      @default("PENDING") // PENDING | CONFIRMED | CANCELLED
   whatsappSentAt  DateTime?
+  emailSentAt     DateTime?
   couponCode      String?
   discountPercent Int?
   createdAt       DateTime    @default(now())

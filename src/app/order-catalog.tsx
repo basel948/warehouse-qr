@@ -743,6 +743,7 @@ function CheckoutSheet({
 }) {
   const { t } = useLocale();
   const [customerName, setCustomerName] = useState("");
+  const [businessName, setBusinessName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
@@ -800,7 +801,7 @@ function CheckoutSheet({
   async function submitOrder() {
     setError(null);
 
-    if (!customerName.trim() || !customerPhone.trim()) {
+    if (!customerName.trim() || !businessName.trim() || !customerPhone.trim()) {
       setError(t("checkout.errorMissingInfo"));
       return;
     }
@@ -812,6 +813,7 @@ function CheckoutSheet({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           customerName,
+          businessName,
           customerPhone,
           couponCode: appliedCoupon?.code,
           items: lines.map((line) => ({
@@ -957,6 +959,13 @@ function CheckoutSheet({
                 placeholder={t("checkout.namePlaceholder")}
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
+                className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[13px] bg-[#f7f5f1] placeholder:text-[#a39a8e]"
+              />
+              <input
+                type="text"
+                placeholder={t("checkout.businessNamePlaceholder")}
+                value={businessName}
+                onChange={(e) => setBusinessName(e.target.value)}
                 className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[13px] bg-[#f7f5f1] placeholder:text-[#a39a8e]"
               />
               <input

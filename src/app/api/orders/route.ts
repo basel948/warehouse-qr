@@ -3,7 +3,9 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { sendOrderWhatsAppMessage } from "@/lib/whatsapp";
+import { generateOrderPdf } from "@/lib/order-pdf";
+import { sendOrderEmail } from "@/lib/order-email";
+import { sendOrderPdfWhatsAppMessage } from "@/lib/whatsapp";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -20,6 +22,7 @@ export async function GET() {
 
 const createOrderSchema = z.object({
   customerName: z.string().min(1),
+  businessName: z.string().min(1),
   customerPhone: z.string().min(5),
   couponCode: z.string().min(1).optional(),
   items: z
@@ -38,7 +41,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { customerName, customerPhone, couponCode, items } = parsed.data;
+  const { customerName, businessName, customerPhone, couponCode, items } = parsed.data;
 
   const productIds = items.map((item) => item.productId);
   const products = await prisma.product.findMany({
@@ -67,6 +70,7 @@ export async function POST(request: Request) {
   const order = await prisma.order.create({
     data: {
       customerName,
+      businessName,
       customerPhone,
       couponCode: appliedCouponCode,
       discountPercent,
@@ -86,10 +90,14 @@ export async function POST(request: Request) {
   const total = subtotal - discountAmount;
 
   let whatsappError: string | null = null;
+  let emailError: string | null = null;
+
   try {
-    await sendOrderWhatsAppMessage({
+    const pdfBuffer = await generateOrderPdf({
       orderId: order.id,
+      createdAt: order.createdAt,
       customerName: order.customerName,
+      businessName: order.businessName,
       customerPhone: order.customerPhone,
       items: order.items.map((item) => ({
         productName: item.product.name,
@@ -101,17 +109,49 @@ export async function POST(request: Request) {
       discountPercent,
       total,
     });
-    await prisma.order.update({
-      where: { id: order.id },
-      data: { whatsappSentAt: new Date() },
-    });
+
+    try {
+      await sendOrderPdfWhatsAppMessage({
+        orderId: order.id,
+        customerName: order.customerName,
+        total,
+        pdfBuffer,
+      });
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { whatsappSentAt: new Date() },
+      });
+    } catch (error) {
+      whatsappError = error instanceof Error ? error.message : "Unknown WhatsApp error";
+      console.error("Failed to send WhatsApp order notification:", whatsappError);
+    }
+
+    try {
+      await sendOrderEmail({
+        orderId: order.id,
+        customerName: order.customerName,
+        businessName: order.businessName,
+        customerPhone: order.customerPhone,
+        total,
+        pdfBuffer,
+      });
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { emailSentAt: new Date() },
+      });
+    } catch (error) {
+      emailError = error instanceof Error ? error.message : "Unknown email error";
+      console.error("Failed to send order email:", emailError);
+    }
   } catch (error) {
-    whatsappError = error instanceof Error ? error.message : "Unknown WhatsApp error";
-    console.error("Failed to send WhatsApp order notification:", whatsappError);
+    const pdfError = error instanceof Error ? error.message : "Unknown PDF error";
+    console.error("Failed to generate order PDF:", pdfError);
+    whatsappError = pdfError;
+    emailError = pdfError;
   }
 
   return NextResponse.json(
-    { order, subtotal, discountAmount, total, whatsappError },
+    { order, subtotal, discountAmount, total, whatsappError, emailError },
     { status: 201 }
   );
 }
