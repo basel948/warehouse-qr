@@ -339,23 +339,23 @@ export function OrderCatalog({ products }: { products: Product[] }) {
                   <button
                     key={subSection.key}
                     onClick={() => scrollToSubSection(subSection.key)}
-                    className="shrink-0 flex flex-col items-center gap-1.5 w-16"
+                    className="shrink-0 flex flex-col items-center gap-2 w-20"
                   >
-                    <span className="w-14 h-14 rounded-full border border-[#eae5dc] bg-white overflow-hidden flex items-center justify-center shrink-0">
+                    <span className="w-[76px] h-[76px] rounded-full border border-[#eae5dc] bg-white overflow-hidden flex items-center justify-center shrink-0">
                       {subSection.products[0]?.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={withCloudinaryTransform(subSection.products[0].imageUrl, "q_auto")}
                           alt=""
-                          className="w-full h-full object-contain p-1.5"
+                          className="w-full h-full object-contain p-2"
                         />
                       ) : (
-                        <span className="text-xl" aria-hidden>
+                        <span className="text-2xl" aria-hidden>
                           📦
                         </span>
                       )}
                     </span>
-                    <span className="text-[11px] text-center leading-tight text-[#4a443c] line-clamp-2">
+                    <span className="text-[12px] text-center leading-tight text-[#4a443c] line-clamp-2">
                       {subSection.name}
                     </span>
                   </button>
