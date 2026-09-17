@@ -759,6 +759,12 @@ function ProductCard({
         <p className="text-sm font-bold text-[#1a1714]">₪{product.price.toFixed(2)}</p>
 
         <div className="mt-auto flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+          <button
+            onClick={onExpand}
+            className="flex-1 min-w-0 h-9 border border-[var(--accent)] text-[#4a443c] font-semibold rounded-[9px] text-[11px]"
+          >
+            {t("catalog.details")}
+          </button>
           <AddToCartControl
             product={product}
             quantity={quantity}
@@ -766,12 +772,6 @@ function ProductCard({
             onSetQuantity={onSetQuantity}
             size="sm"
           />
-          <button
-            onClick={onExpand}
-            className="flex-1 min-w-0 h-9 border border-[#e6e0d6] text-[#4a443c] font-semibold rounded-[9px] text-[11px]"
-          >
-            {t("catalog.details")}
-          </button>
         </div>
       </div>
     </div>
