@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
+import { WAREHOUSE_CONTACT_PHONE, WAREHOUSE_NAME } from "@/lib/branding";
 import { withCloudinaryTransform } from "@/lib/cloudinary-url";
 
 type Category = {
@@ -46,6 +47,7 @@ type Section = {
 const UNCATEGORIZED_KEY = "__uncategorized";
 const SANO_KEY = "__sano";
 const SANO_BRAND_MATCH = "סנו";
+const CART_STORAGE_KEY = "warehouse-cart";
 
 type SortMode = "name-asc" | "name-desc" | "price-asc" | "price-desc";
 
@@ -88,6 +90,31 @@ export function OrderCatalog({ products }: { products: Product[] }) {
   const subSectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   const compareProducts = useMemo(() => makeProductComparator(sortMode), [sortMode]);
+
+  // Restore any cart saved from a previous visit (runs once, client-side only
+  // - localStorage isn't available during server rendering).
+  const [cartHydrated, setCartHydrated] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CART_STORAGE_KEY);
+      if (raw) setCart(JSON.parse(raw));
+    } catch {
+      // Private browsing / storage disabled - just start with an empty cart.
+    }
+    setCartHydrated(true);
+  }, []);
+
+  // Wait for the restore above to finish before writing anything - otherwise
+  // this fires first with the initial empty cart and clobbers the saved data
+  // before the restore's setCart takes effect.
+  useEffect(() => {
+    if (!cartHydrated) return;
+    try {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+    } catch {
+      // Ignore - cart still works for this session, just won't persist.
+    }
+  }, [cart, cartHydrated]);
 
   const priceFilterActive = minPrice.trim() !== "" || maxPrice.trim() !== "";
 
@@ -208,6 +235,11 @@ export function OrderCatalog({ products }: { products: Product[] }) {
   }
 
   const expandedProduct = products.find((p) => p.id === expandedProductId) ?? null;
+  const contactFooterRef = useRef<HTMLElement | null>(null);
+
+  function scrollToContact() {
+    contactFooterRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   return (
     <div className="min-h-screen bg-[#f7f5f1] pb-28">
@@ -215,7 +247,12 @@ export function OrderCatalog({ products }: { products: Product[] }) {
         <div className="px-4 pt-4 pb-3">
           <div className="flex items-center justify-between gap-3 mb-3.5">
             <BrandLogo />
-            <LanguageSwitcher />
+            <div className="flex items-center gap-3">
+              <button onClick={scrollToContact} className="text-[13px] font-semibold text-[#6b6259]">
+                {t("catalog.contactUs")}
+              </button>
+              <LanguageSwitcher />
+            </div>
           </div>
           <div className="flex gap-2">
             <div className="relative flex-1">
@@ -410,6 +447,32 @@ export function OrderCatalog({ products }: { products: Product[] }) {
           </>
         )}
       </main>
+
+      {WAREHOUSE_CONTACT_PHONE && (
+        <footer
+          ref={contactFooterRef}
+          className="border-t border-[#eae5dc] bg-white px-4 py-7 mt-4 text-center scroll-mt-24"
+        >
+          <p className="text-sm font-semibold text-[#1a1714] mb-1">{WAREHOUSE_NAME}</p>
+          <p className="text-[13px] text-[#6b6259] mb-3.5">{t("catalog.contactQuestion")}</p>
+          <div className="flex items-center justify-center gap-2.5">
+            <a
+              href={`tel:+${WAREHOUSE_CONTACT_PHONE}`}
+              className="text-[13px] font-semibold text-[#1a1714] border border-[#e6e0d6] rounded-full px-4 py-2"
+            >
+              📞 {WAREHOUSE_CONTACT_PHONE}
+            </a>
+            <a
+              href={`https://wa.me/${WAREHOUSE_CONTACT_PHONE}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[13px] font-semibold text-white bg-[#25D366] rounded-full px-4 py-2"
+            >
+              WhatsApp
+            </a>
+          </div>
+        </footer>
+      )}
 
       {cartCount > 0 && !checkoutOpen && (
         <div className="fixed bottom-0 inset-x-0 z-20 px-3.5 pt-4 pb-4 bg-gradient-to-t from-[#f7f5f1] from-[62%] to-transparent">
