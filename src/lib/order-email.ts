@@ -1,4 +1,3 @@
-import nodemailer from "nodemailer";
 import { WAREHOUSE_NAME } from "@/lib/branding";
 
 type OrderEmailMessage = {
@@ -10,47 +9,63 @@ type OrderEmailMessage = {
   pdfBuffer: Buffer;
 };
 
-let transporter: ReturnType<typeof nodemailer.createTransport> | null = null;
-
-function getTransporter() {
-  if (transporter) return transporter;
-
-  const user = process.env.GMAIL_USER;
-  const appPassword = process.env.GMAIL_APP_PASSWORD;
-  if (!user || !appPassword) return null;
-
-  transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: { user, pass: appPassword },
-  });
-  return transporter;
-}
-
+/**
+ * Sends the order email via SendGrid's HTTPS API rather than raw SMTP.
+ * Railway (and many hosts) block outbound SMTP ports as an anti-spam
+ * measure, so a direct SMTP transport (e.g. Gmail) never reaches its
+ * destination from there even with valid credentials - an HTTPS API call
+ * isn't affected by that.
+ */
 export async function sendOrderEmail(order: OrderEmailMessage): Promise<void> {
+  const apiKey = process.env.SENDGRID_API_KEY;
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL;
   const ownerEmail = process.env.WAREHOUSE_OWNER_EMAIL;
-  const client = getTransporter();
 
-  if (!client || !ownerEmail) {
+  if (!apiKey || !fromEmail || !ownerEmail) {
     throw new Error(
-      "Email is not configured: set GMAIL_USER, GMAIL_APP_PASSWORD and WAREHOUSE_OWNER_EMAIL"
+      "Email is not configured: set SENDGRID_API_KEY, SENDGRID_FROM_EMAIL and WAREHOUSE_OWNER_EMAIL"
     );
   }
 
   const filename = `הזמנה-${order.orderId.slice(-6)}.pdf`;
 
-  await client.sendMail({
-    from: `"${WAREHOUSE_NAME}" <${process.env.GMAIL_USER}>`,
-    to: ownerEmail,
-    subject: `הזמנה חדשה מ-${order.customerName} · סה"כ ₪${order.total.toFixed(2)}`,
-    text: [
-      `הזמנה חדשה #${order.orderId.slice(-6)}`,
-      `שם מלא: ${order.customerName}`,
-      `מעסיק מורשה / שם העסק: ${order.businessName || "-"}`,
-      `מספר טלפון: ${order.customerPhone}`,
-      `סה"כ: ₪${order.total.toFixed(2)}`,
-      "",
-      "פרטי ההזמנה המלאים מצורפים כ-PDF.",
-    ].join("\n"),
-    attachments: [{ filename, content: order.pdfBuffer, contentType: "application/pdf" }],
+  const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      personalizations: [{ to: [{ email: ownerEmail }] }],
+      from: { email: fromEmail, name: WAREHOUSE_NAME },
+      subject: `הזמנה חדשה מ-${order.customerName} · סה"כ ₪${order.total.toFixed(2)}`,
+      content: [
+        {
+          type: "text/plain",
+          value: [
+            `הזמנה חדשה #${order.orderId.slice(-6)}`,
+            `שם מלא: ${order.customerName}`,
+            `מעסיק מורשה / שם העסק: ${order.businessName || "-"}`,
+            `מספר טלפון: ${order.customerPhone}`,
+            `סה"כ: ₪${order.total.toFixed(2)}`,
+            "",
+            "פרטי ההזמנה המלאים מצורפים כ-PDF.",
+          ].join("\n"),
+        },
+      ],
+      attachments: [
+        {
+          content: order.pdfBuffer.toString("base64"),
+          filename,
+          type: "application/pdf",
+          disposition: "attachment",
+        },
+      ],
+    }),
   });
+
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`SendGrid API request failed (${res.status}): ${detail}`);
+  }
 }
