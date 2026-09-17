@@ -94,15 +94,31 @@ export function OrderCatalog({ products }: { products: Product[] }) {
   // Restore any cart saved from a previous visit (runs once, client-side only
   // - localStorage isn't available during server rendering).
   const [cartHydrated, setCartHydrated] = useState(false);
+  const [resumePromptOpen, setResumePromptOpen] = useState(false);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(CART_STORAGE_KEY);
-      if (raw) setCart(JSON.parse(raw));
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Object.keys(parsed).length > 0) {
+          setCart(parsed);
+          setResumePromptOpen(true);
+        }
+      }
     } catch {
       // Private browsing / storage disabled - just start with an empty cart.
     }
     setCartHydrated(true);
   }, []);
+
+  function continueSavedOrder() {
+    setResumePromptOpen(false);
+  }
+
+  function discardSavedOrder() {
+    setCart({});
+    setResumePromptOpen(false);
+  }
 
   // Wait for the restore above to finish before writing anything - otherwise
   // this fires first with the initial empty cart and clobbers the saved data
@@ -513,6 +529,32 @@ export function OrderCatalog({ products }: { products: Product[] }) {
           onSetQuantity={(qty) => setQuantity(expandedProduct.id, qty)}
           onClose={() => setExpandedProductId(null)}
         />
+      )}
+
+      {resumePromptOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center bg-[#1a1714]/55">
+          <div className="w-full sm:max-w-sm bg-white rounded-t-[22px] sm:rounded-2xl p-[22px] text-center">
+            <div className="w-[38px] h-1 rounded-full bg-[#e0d9cf] mx-auto mb-4 sm:hidden" aria-hidden />
+            <p className="font-bold text-[17px] text-[#1a1714] mb-1.5">
+              {t("catalog.resumeOrderTitle")}
+            </p>
+            <p className="text-sm text-[#6b6259] mb-5">{t("catalog.resumeOrderBody")}</p>
+            <div className="flex flex-col gap-2.5">
+              <button
+                onClick={continueSavedOrder}
+                className="w-full bg-[#1a1714] text-white rounded-xl py-[13px] font-semibold text-sm"
+              >
+                {t("catalog.resumeOrderContinue")}
+              </button>
+              <button
+                onClick={discardSavedOrder}
+                className="w-full text-sm text-[#b3402e] font-semibold py-1.5"
+              >
+                {t("catalog.resumeOrderDiscard")}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
