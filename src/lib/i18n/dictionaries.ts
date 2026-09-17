@@ -36,6 +36,7 @@ export const dictionaries = {
       checkout: "לתשלום",
       outOfStock: "אזל מהמלאי",
       addToCart: "הוספה לסל",
+      details: "פרטים",
     },
     checkout: {
       title: "ההזמנה שלך",
@@ -199,6 +200,7 @@ export const dictionaries = {
       checkout: "الدفع",
       outOfStock: "غير متوفر",
       addToCart: "أضف إلى السلة",
+      details: "التفاصيل",
     },
     checkout: {
       title: "طلبك",

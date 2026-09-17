@@ -614,26 +614,52 @@ function AddToCartControl({
   }
 
   if (!product.inStock) {
+    if (size === "lg") {
+      return (
+        <p className="text-center font-semibold text-[#8a8177] bg-[#f2efe9] rounded-[9px] text-sm py-3">
+          {t("catalog.outOfStock")}
+        </p>
+      );
+    }
     return (
-      <p
-        className={`text-center font-semibold text-[#8a8177] bg-[#f2efe9] rounded-[9px] ${
-          size === "lg" ? "text-sm py-3" : "text-[11px] py-2"
-        }`}
-      >
+      <span className="shrink-0 flex items-center justify-center text-center leading-[1.1] text-[9px] font-semibold text-[#8a8177] bg-[#f2efe9] rounded-[9px] h-9 px-1.5 max-w-[78px]">
         {t("catalog.outOfStock")}
-      </p>
+      </span>
     );
   }
 
   if (quantity === 0) {
+    if (size === "lg") {
+      return (
+        <button
+          onClick={onAdd}
+          className="bg-[var(--accent)] text-white font-semibold rounded-[9px] w-full text-sm py-3"
+        >
+          {t("catalog.addToCart")}
+        </button>
+      );
+    }
     return (
       <button
         onClick={onAdd}
-        className={`bg-[var(--accent)] text-white font-semibold rounded-[9px] ${
-          size === "lg" ? "w-full text-sm py-3" : "w-full text-xs py-2"
-        }`}
+        aria-label={t("catalog.addToCart")}
+        className="shrink-0 flex items-center justify-center bg-[var(--accent)] text-white rounded-[9px] w-9 h-9"
       >
-        {t("catalog.addToCart")}
+        <svg
+          width="17"
+          height="17"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <circle cx="9" cy="21" r="1" />
+          <circle cx="20" cy="21" r="1" />
+          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+        </svg>
       </button>
     );
   }
@@ -641,14 +667,14 @@ function AddToCartControl({
   return (
     <div
       className={`flex items-center justify-between bg-[#1a1714] rounded-[9px] text-white p-[2px] ${
-        size === "lg" ? "w-full" : ""
+        size === "lg" ? "w-full" : "shrink-0 w-[104px] h-9"
       }`}
     >
       <button
         onClick={() => onSetQuantity(quantity - 1)}
         aria-label="Decrease quantity"
         className={`shrink-0 font-bold leading-none ${
-          size === "lg" ? "w-10 h-10 text-lg" : "w-[26px] h-[26px] text-base"
+          size === "lg" ? "w-10 h-10 text-lg" : "w-7 h-full text-base"
         }`}
       >
         −
@@ -665,14 +691,14 @@ function AddToCartControl({
         }}
         aria-label="Quantity"
         className={`min-w-0 bg-transparent text-center font-semibold outline-none ${
-          size === "lg" ? "w-12 text-base" : "w-8 text-[13px]"
+          size === "lg" ? "w-12 text-base" : "w-7 text-[13px]"
         }`}
       />
       <button
         onClick={() => onSetQuantity(quantity + 1)}
         aria-label="Increase quantity"
         className={`shrink-0 font-bold leading-none ${
-          size === "lg" ? "w-10 h-10 text-lg" : "w-[26px] h-[26px] text-base"
+          size === "lg" ? "w-10 h-10 text-lg" : "w-7 h-full text-base"
         }`}
       >
         +
@@ -694,6 +720,7 @@ function ProductCard({
   onSetQuantity: (quantity: number) => void;
   onExpand: () => void;
 }) {
+  const { t } = useLocale();
   return (
     <div
       onClick={onExpand}
@@ -731,7 +758,7 @@ function ProductCard({
         </p>
         <p className="text-sm font-bold text-[#1a1714]">₪{product.price.toFixed(2)}</p>
 
-        <div className="mt-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="mt-auto flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
           <AddToCartControl
             product={product}
             quantity={quantity}
@@ -739,6 +766,12 @@ function ProductCard({
             onSetQuantity={onSetQuantity}
             size="sm"
           />
+          <button
+            onClick={onExpand}
+            className="flex-1 min-w-0 h-9 border border-[#e6e0d6] text-[#4a443c] font-semibold rounded-[9px] text-[11px]"
+          >
+            {t("catalog.details")}
+          </button>
         </div>
       </div>
     </div>
