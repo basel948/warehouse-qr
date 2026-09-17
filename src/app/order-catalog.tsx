@@ -494,14 +494,14 @@ export function OrderCatalog({ products }: { products: Product[] }) {
         <div className="fixed bottom-0 inset-x-0 z-20 px-3.5 pt-4 pb-4 bg-gradient-to-t from-[#f7f5f1] from-[62%] to-transparent">
           <button
             onClick={() => setCheckoutOpen(true)}
-            className="w-full bg-[#1a1714] text-white rounded-2xl px-4 py-[13px] flex items-center justify-between font-semibold shadow-[0_12px_24px_-12px_rgba(26,23,20,0.7)]"
+            className="w-full bg-[var(--accent)] text-white rounded-xl px-4 py-2 flex items-center justify-between font-semibold shadow-[0_10px_20px_-8px_rgba(0,0,0,0.45)]"
           >
-            <span className="text-[13px] text-[#c9c1b6]">
+            <span className="text-[12px] text-white/75">
               {cartCount === 1
                 ? t("catalog.cartItemsOne")
                 : t("catalog.cartItemsOther", { count: cartCount })}
             </span>
-            <span className="text-[14px] font-semibold text-[var(--accent)]">
+            <span className="text-[14px] font-bold text-white">
               ₪{cartTotal.toFixed(2)} · {t("catalog.checkout")}
             </span>
           </button>
