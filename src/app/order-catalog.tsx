@@ -666,8 +666,10 @@ function AddToCartControl({
 
   return (
     <div
-      className={`flex items-center justify-between bg-[#1a1714] rounded-[9px] text-white p-[2px] ${
-        size === "lg" ? "w-full" : "shrink-0 w-[104px] h-9"
+      className={`flex items-center justify-between rounded-[9px] p-[2px] ${
+        size === "lg"
+          ? "w-full bg-[#1a1714] text-white"
+          : "shrink-0 w-[104px] h-9 bg-white border border-[var(--accent)] text-[var(--accent)]"
       }`}
     >
       <button
@@ -723,13 +725,7 @@ function ProductCard({
   const { t } = useLocale();
   return (
     <div
-      onClick={onExpand}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") onExpand();
-      }}
-      className={`border border-[#eae5dc] rounded-[14px] overflow-hidden flex flex-col bg-white cursor-pointer ${
+      className={`border border-[#eae5dc] rounded-[14px] overflow-hidden flex flex-col bg-white ${
         !product.inStock ? "opacity-[.55]" : ""
       }`}
     >
@@ -758,7 +754,7 @@ function ProductCard({
         </p>
         <p className="text-sm font-bold text-[#1a1714]">₪{product.price.toFixed(2)}</p>
 
-        <div className="mt-auto flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <div className="mt-auto flex items-center gap-1.5">
           <button
             onClick={onExpand}
             className="flex-1 min-w-0 h-9 border border-[var(--accent)] text-[#4a443c] font-semibold rounded-[9px] text-[11px]"
