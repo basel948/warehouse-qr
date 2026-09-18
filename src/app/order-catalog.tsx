@@ -491,19 +491,28 @@ export function OrderCatalog({ products }: { products: Product[] }) {
       )}
 
       {cartCount > 0 && !checkoutOpen && (
-        <div className="fixed bottom-0 inset-x-0 z-20 px-3.5 pt-4 pb-4 bg-gradient-to-t from-[#f7f5f1] from-[62%] to-transparent">
+        <div className="fixed bottom-0 inset-x-0 z-20 px-3.5 pt-4 pb-4 bg-gradient-to-t from-[#f7f5f1] from-[62%] to-transparent flex justify-center">
           <button
             onClick={() => setCheckoutOpen(true)}
-            className="w-full bg-[var(--accent)] text-white rounded-xl px-4 py-2 flex items-center justify-between font-semibold shadow-[0_10px_20px_-8px_rgba(0,0,0,0.45)]"
+            className="bg-[var(--accent)] text-white rounded-full ps-5 pe-4 py-2.5 flex items-center gap-2 font-bold text-sm shadow-[0_10px_20px_-8px_rgba(0,0,0,0.45)]"
           >
-            <span className="text-[12px] text-white/75">
-              {cartCount === 1
-                ? t("catalog.cartItemsOne")
-                : t("catalog.cartItemsOther", { count: cartCount })}
-            </span>
-            <span className="text-[14px] font-bold text-white">
+            <span>
               ₪{cartTotal.toFixed(2)} · {t("catalog.checkout")}
             </span>
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M19 12H5" />
+              <path d="M11 18l-6-6 6-6" />
+            </svg>
           </button>
         </div>
       )}
