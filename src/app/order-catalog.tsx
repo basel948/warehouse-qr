@@ -366,7 +366,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
       <main className="px-4 pt-5">
         {isSearching ? (
           <>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
               {searchResults.map((product) => (
                 <ProductCard
                   key={product.id}
@@ -438,7 +438,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
                         <div className="flex-1 h-px bg-[#c9c1b6]" aria-hidden />
                       </div>
                     )}
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
                       {subSection.products.map((product) => (
                         <ProductCard
                           key={product.id}
