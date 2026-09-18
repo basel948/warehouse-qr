@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ImageUploadField } from "@/components/image-upload-field";
+import { PackageIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 
 type Category = {
@@ -566,10 +567,10 @@ export default function AdminProductsPage() {
                         />
                       ) : (
                         <div
-                          className="w-[38px] h-[38px] shrink-0 rounded-[9px] bg-[#f2efe9] flex items-center justify-center text-[#c5bdb1] text-xs"
+                          className="w-[38px] h-[38px] shrink-0 rounded-[9px] bg-[#f2efe9] flex items-center justify-center text-[#c5bdb1]"
                           aria-hidden
                         >
-                          📦
+                          <PackageIcon className="w-4 h-4" />
                         </div>
                       )}
                       <span className="text-[#1a1714] truncate">{product.name}</span>

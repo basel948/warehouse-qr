@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans_Arabic } from "next/font/google";
-import { WAREHOUSE_ACCENT_COLOR, WAREHOUSE_NAME } from "@/lib/branding";
+import { WAREHOUSE_ACCENT_COLOR, WAREHOUSE_NAME, WAREHOUSE_SECONDARY_COLOR } from "@/lib/branding";
 import { LocaleProvider } from "@/components/locale-provider";
 import { getLocaleFromCookies } from "@/lib/i18n/get-locale";
 import { LOCALE_DIR } from "@/lib/i18n/locales";
@@ -29,7 +29,12 @@ export default function RootLayout({
     <html lang={locale} dir={LOCALE_DIR[locale]}>
       <body
         className={`${ibmPlexSansArabic.variable} antialiased`}
-        style={{ ["--accent" as string]: WAREHOUSE_ACCENT_COLOR }}
+        style={
+          {
+            "--accent": WAREHOUSE_ACCENT_COLOR,
+            "--secondary": WAREHOUSE_SECONDARY_COLOR,
+          } as React.CSSProperties
+        }
       >
         <LocaleProvider initialLocale={locale}>{children}</LocaleProvider>
       </body>

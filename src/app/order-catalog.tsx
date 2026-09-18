@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
+import { CheckIcon, PackageIcon, PhoneIcon, SearchIcon, StarIcon } from "@/components/icons";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
 import { WAREHOUSE_CONTACT_PHONE, WAREHOUSE_NAME } from "@/lib/branding";
@@ -272,9 +273,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
           </div>
           <div className="flex gap-2">
             <div className="relative flex-1">
-              <span className="absolute start-3.5 top-1/2 -translate-y-1/2 text-[#a39a8e]" aria-hidden>
-                🔍
-              </span>
+              <SearchIcon className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#a39a8e]" />
               <input
                 type="search"
                 placeholder={t("catalog.searchPlaceholder")}
@@ -347,7 +346,10 @@ export function OrderCatalog({ products }: { products: Product[] }) {
                 special
                 onClick={() => setActiveTab(SANO_KEY)}
               >
-                ⭐ {sanoSection.name}
+                <span className="inline-flex items-center gap-1">
+                  <StarIcon className="w-3.5 h-3.5" />
+                  {sanoSection.name}
+                </span>
               </TabButton>
             )}
             {sections.map((section) => (
@@ -403,9 +405,7 @@ export function OrderCatalog({ products }: { products: Product[] }) {
                           className="w-full h-full object-contain p-2"
                         />
                       ) : (
-                        <span className="text-2xl" aria-hidden>
-                          📦
-                        </span>
+                        <PackageIcon className="w-7 h-7 text-[#c5bdb1]" />
                       )}
                     </span>
                     <span className="text-[12px] text-center leading-tight text-[#4a443c] line-clamp-2">
@@ -474,9 +474,10 @@ export function OrderCatalog({ products }: { products: Product[] }) {
           <div className="flex items-center justify-center gap-2.5">
             <a
               href={`tel:+${WAREHOUSE_CONTACT_PHONE}`}
-              className="text-[13px] font-semibold text-[#1a1714] border border-[#e6e0d6] rounded-full px-4 py-2"
+              className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#1a1714] border border-[#e6e0d6] rounded-full px-4 py-2"
             >
-              📞 {WAREHOUSE_CONTACT_PHONE}
+              <PhoneIcon className="w-3.5 h-3.5" />
+              {WAREHOUSE_CONTACT_PHONE}
             </a>
             <a
               href={`https://wa.me/${WAREHOUSE_CONTACT_PHONE}`}
@@ -752,9 +753,7 @@ function ProductCard({
             className="w-full h-full object-contain"
           />
         ) : (
-          <span className="text-xl" aria-hidden>
-            📦
-          </span>
+          <PackageIcon className="w-6 h-6 text-[#c5bdb1]" />
         )}
       </div>
 
@@ -767,7 +766,7 @@ function ProductCard({
         <div className="mt-auto flex items-center gap-1.5">
           <button
             onClick={onExpand}
-            className="flex-1 min-w-0 h-9 border border-[var(--accent)] text-[#4a443c] font-semibold rounded-[9px] text-[11px]"
+            className="flex-1 min-w-0 h-9 border border-[var(--secondary)] text-[var(--secondary)] font-semibold rounded-[9px] text-[11px]"
           >
             {t("catalog.details")}
           </button>
@@ -830,9 +829,7 @@ function ProductDetailModal({
                 className="w-full h-full object-contain"
               />
             ) : (
-              <span className="text-5xl" aria-hidden>
-                📦
-              </span>
+              <PackageIcon className="w-16 h-16 text-[#c5bdb1]" />
             )}
           </div>
           <button
@@ -990,8 +987,8 @@ function CheckoutSheet({
       <div className="w-full sm:max-w-md bg-white rounded-t-[22px] sm:rounded-2xl max-h-[90vh] overflow-y-auto">
         {success ? (
           <div className="p-8 text-center">
-            <div className="w-[52px] h-[52px] rounded-full bg-[#f1f7f1] text-[#2f6b3a] flex items-center justify-center text-2xl mx-auto mb-3.5">
-              ✓
+            <div className="w-[52px] h-[52px] rounded-full bg-[#f1f7f1] text-[#2f6b3a] flex items-center justify-center mx-auto mb-3.5">
+              <CheckIcon className="w-6 h-6" />
             </div>
             <p className="font-bold text-[18px] text-[#1a1714] mb-2">{t("checkout.successTitle")}</p>
             <p className="text-sm text-[#6b6259] mb-1.5">

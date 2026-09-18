@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { PackageIcon } from "@/components/icons";
 
 type ErrorMessages = {
   notImage: string;
@@ -96,10 +97,10 @@ export function ImageUploadField({
         />
       ) : (
         <div
-          className="w-14 h-14 shrink-0 rounded-[10px] border border-dashed border-[#ddd6cb] flex items-center justify-center text-[#c5bdb1] text-xl"
+          className="w-14 h-14 shrink-0 rounded-[10px] border border-dashed border-[#ddd6cb] flex items-center justify-center text-[#c5bdb1]"
           aria-hidden
         >
-          📦
+          <PackageIcon className="w-6 h-6" />
         </div>
       )}
       <div className="flex flex-col gap-1 min-w-0">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { CheckIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 
 type OrderItem = {
@@ -169,14 +170,20 @@ export default function AdminOrdersPage() {
 
               <div className="flex items-center justify-between mt-3.5">
                 <div className="flex flex-col gap-0.5">
-                  <span className={`text-xs ${order.whatsappSentAt ? "text-[#2f6b3a]" : "text-[#8a5a06]"}`}>
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs ${order.whatsappSentAt ? "text-[#2f6b3a]" : "text-[#8a5a06]"}`}
+                  >
+                    {order.whatsappSentAt && <CheckIcon className="w-3 h-3" />}
                     {order.whatsappSentAt
-                      ? `✓ ${t("admin.orders.whatsappSent")}`
+                      ? t("admin.orders.whatsappSent")
                       : t("admin.orders.whatsappNotSent")}
                   </span>
-                  <span className={`text-xs ${order.emailSentAt ? "text-[#2f6b3a]" : "text-[#8a5a06]"}`}>
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs ${order.emailSentAt ? "text-[#2f6b3a]" : "text-[#8a5a06]"}`}
+                  >
+                    {order.emailSentAt && <CheckIcon className="w-3 h-3" />}
                     {order.emailSentAt
-                      ? `✓ ${t("admin.orders.emailSent")}`
+                      ? t("admin.orders.emailSent")
                       : t("admin.orders.emailNotSent")}
                   </span>
                 </div>
