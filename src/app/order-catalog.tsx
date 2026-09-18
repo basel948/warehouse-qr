@@ -494,14 +494,14 @@ export function OrderCatalog({ products }: { products: Product[] }) {
         <div className="fixed bottom-0 inset-x-0 z-20 px-3.5 pt-4 pb-4 bg-gradient-to-t from-[#f7f5f1] from-[62%] to-transparent flex justify-center">
           <button
             onClick={() => setCheckoutOpen(true)}
-            className="bg-[var(--accent)] text-white rounded-full ps-5 pe-4 py-2.5 flex items-center gap-2 font-bold text-sm shadow-[0_10px_20px_-8px_rgba(0,0,0,0.45)]"
+            className="w-1/2 min-w-[220px] bg-[var(--accent)] text-white rounded-full ps-6 pe-5 py-3.5 flex items-center justify-center gap-2.5 font-bold text-base shadow-[0_10px_20px_-8px_rgba(0,0,0,0.45)]"
           >
             <span>
               ₪{cartTotal.toFixed(2)} · {t("catalog.checkout")}
             </span>
             <svg
-              width="16"
-              height="16"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
