@@ -1,6 +1,7 @@
 import path from "node:path";
-import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
-import { WAREHOUSE_NAME } from "@/lib/branding";
+import { Document, Font, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { WAREHOUSE_LOGO_URL, WAREHOUSE_NAME } from "@/lib/branding";
+import { withCloudinaryTransform } from "@/lib/cloudinary-url";
 
 Font.register({
   family: "Alef",
@@ -46,6 +47,7 @@ const styles = StyleSheet.create({
     borderBottom: "1pt solid #d8d0c3",
   },
   warehouseName: { fontSize: 16, fontWeight: "bold" },
+  warehouseLogo: { height: 30, objectFit: "contain" },
   title: { fontSize: 13, fontWeight: "bold", marginBottom: 3, textAlign: "right" },
   meta: { fontSize: 9, color: "#6b6259", textAlign: "right" },
   section: { marginBottom: 16 },
@@ -103,7 +105,14 @@ function OrderDocument({ order }: { order: OrderPdfData }) {
               {order.createdAt.toLocaleDateString("he-IL")} {order.createdAt.toLocaleTimeString("he-IL")}
             </Text>
           </View>
-          <Text style={styles.warehouseName}>{WAREHOUSE_NAME}</Text>
+          {WAREHOUSE_LOGO_URL ? (
+            <Image
+              src={withCloudinaryTransform(WAREHOUSE_LOGO_URL, "w_400,q_auto")}
+              style={styles.warehouseLogo}
+            />
+          ) : (
+            <Text style={styles.warehouseName}>{WAREHOUSE_NAME}</Text>
+          )}
         </View>
 
         <View style={styles.section}>

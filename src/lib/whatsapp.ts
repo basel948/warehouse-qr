@@ -2,27 +2,41 @@ const GRAPH_API_VERSION = "v20.0";
 
 type OrderPdfMessage = {
   orderId: string;
-  customerName: string;
-  total: number;
+  to: string;
+  caption: string;
   pdfBuffer: Buffer;
 };
 
 /**
+ * Buyers type their phone in local Israeli format (leading 0), but the
+ * WhatsApp Cloud API requires international format with no leading 0
+ * (e.g. "972501234567"). Owner numbers in env vars are already stored in
+ * that format, so this is a no-op for those.
+ */
+function normalizeIsraeliPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.startsWith("0")) {
+    return `972${digits.slice(1)}`;
+  }
+  return digits;
+}
+
+/**
  * Sends the order as a WhatsApp document message (PDF + short caption) to
- * the warehouse owner via the Meta WhatsApp Cloud API. Note: outside Meta's
+ * the given recipient via the Meta WhatsApp Cloud API. Note: outside Meta's
  * 24-hour customer service window, business-initiated messages are
- * rejected — you'd need an approved message template instead. See README
- * for setup details.
+ * rejected — you'd need an approved message template instead. This applies
+ * per-recipient: the owner staying in-window (by messaging the business
+ * number periodically) doesn't help a buyer who has never messaged it, so
+ * buyer-copy sends will often fail until that's set up. See README for
+ * setup details.
  */
 export async function sendOrderPdfWhatsAppMessage(order: OrderPdfMessage): Promise<void> {
   const token = process.env.WHATSAPP_TOKEN;
   const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-  const ownerPhone = process.env.WAREHOUSE_OWNER_PHONE;
 
-  if (!token || !phoneNumberId || !ownerPhone) {
-    throw new Error(
-      "WhatsApp is not configured: set WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID and WAREHOUSE_OWNER_PHONE"
-    );
+  if (!token || !phoneNumberId) {
+    throw new Error("WhatsApp is not configured: set WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID");
   }
 
   const filename = `הזמנה-${order.orderId.slice(-6)}.pdf`;
@@ -58,12 +72,12 @@ export async function sendOrderPdfWhatsAppMessage(order: OrderPdfMessage): Promi
       },
       body: JSON.stringify({
         messaging_product: "whatsapp",
-        to: ownerPhone,
+        to: normalizeIsraeliPhone(order.to),
         type: "document",
         document: {
           id: mediaId,
           filename,
-          caption: `הזמנה חדשה מ-${order.customerName} · סה"כ ₪${order.total.toFixed(2)}`,
+          caption: order.caption,
         },
       }),
     }

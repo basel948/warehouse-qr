@@ -69,6 +69,7 @@ model Order {
   customerPhone   String
   status          String      @default("PENDING") // PENDING | CONFIRMED | CANCELLED
   whatsappSentAt  DateTime?
+  buyerWhatsappSentAt DateTime?
   emailSentAt     DateTime?
   couponCode      String?
   discountPercent Int?

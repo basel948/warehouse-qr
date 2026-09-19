@@ -18,6 +18,7 @@ type Order = {
   customerPhone: string;
   status: string;
   whatsappSentAt: string | null;
+  buyerWhatsappSentAt: string | null;
   emailSentAt: string | null;
   couponCode: string | null;
   discountPercent: number | null;
@@ -177,6 +178,14 @@ export default function AdminOrdersPage() {
                     {order.whatsappSentAt
                       ? t("admin.orders.whatsappSent")
                       : t("admin.orders.whatsappNotSent")}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs ${order.buyerWhatsappSentAt ? "text-[#2f6b3a]" : "text-[#8a5a06]"}`}
+                  >
+                    {order.buyerWhatsappSentAt && <CheckIcon className="w-3 h-3" />}
+                    {order.buyerWhatsappSentAt
+                      ? t("admin.orders.buyerWhatsappSent")
+                      : t("admin.orders.buyerWhatsappNotSent")}
                   </span>
                   <span
                     className={`inline-flex items-center gap-1 text-xs ${order.emailSentAt ? "text-[#2f6b3a]" : "text-[#8a5a06]"}`}

@@ -110,11 +110,13 @@ export async function POST(request: Request) {
       total,
     });
 
+    const ownerPhone = process.env.WAREHOUSE_OWNER_PHONE;
     try {
+      if (!ownerPhone) throw new Error("WAREHOUSE_OWNER_PHONE is not configured");
       await sendOrderPdfWhatsAppMessage({
         orderId: order.id,
-        customerName: order.customerName,
-        total,
+        to: ownerPhone,
+        caption: `הזמנה חדשה מ-${order.customerName} · סה"כ ₪${total.toFixed(2)}`,
         pdfBuffer,
       });
       await prisma.order.update({
@@ -124,6 +126,28 @@ export async function POST(request: Request) {
     } catch (error) {
       whatsappError = error instanceof Error ? error.message : "Unknown WhatsApp error";
       console.error("Failed to send WhatsApp order notification:", whatsappError);
+    }
+
+    // Best-effort: send the buyer their own copy too. Unlike the owner (who
+    // can stay in Meta's 24h session window by messaging the business number
+    // periodically), a first-time buyer usually hasn't - so this will often
+    // fail until an approved message template is set up. That's expected and
+    // shouldn't block anything, same as the sends above.
+    try {
+      await sendOrderPdfWhatsAppMessage({
+        orderId: order.id,
+        to: order.customerPhone,
+        caption: `תודה על ההזמנה! מצורפת ההזמנה שלך · סה"כ ₪${total.toFixed(2)}`,
+        pdfBuffer,
+      });
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { buyerWhatsappSentAt: new Date() },
+      });
+    } catch (error) {
+      const buyerWhatsappError =
+        error instanceof Error ? error.message : "Unknown WhatsApp error";
+      console.error("Failed to send buyer's WhatsApp order copy:", buyerWhatsappError);
     }
 
     try {
