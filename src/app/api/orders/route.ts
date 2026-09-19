@@ -103,6 +103,7 @@ export async function POST(request: Request) {
         productName: item.product.name,
         quantity: item.quantity,
         price: item.price,
+        imageUrl: item.product.imageUrl,
       })),
       subtotal,
       couponCode: appliedCouponCode,

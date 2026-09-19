@@ -15,6 +15,7 @@ export type OrderPdfItem = {
   productName: string;
   quantity: number;
   price: number;
+  imageUrl: string | null;
 };
 
 export type OrderPdfData = {
@@ -74,6 +75,9 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   colProduct: { width: "46%" },
+  productCell: { flexDirection: "row", alignItems: "center", gap: 6 },
+  productThumb: { width: 20, height: 20, objectFit: "cover", borderRadius: 3 },
+  productName: { fontSize: 9, flex: 1 },
   colQty: { width: "16%" },
   colPrice: { width: "19%" },
   colTotal: { width: "19%" },
@@ -140,7 +144,15 @@ function OrderDocument({ order }: { order: OrderPdfData }) {
           </View>
           {order.items.map((item, index) => (
             <View style={styles.tableRow} key={index}>
-              <Text style={[styles.tableCell, styles.colProduct]}>{item.productName}</Text>
+              <View style={[styles.tableCell, styles.colProduct, styles.productCell]}>
+                {item.imageUrl && (
+                  <Image
+                    src={withCloudinaryTransform(item.imageUrl, "w_100,h_100,c_fill,q_auto")}
+                    style={styles.productThumb}
+                  />
+                )}
+                <Text style={styles.productName}>{item.productName}</Text>
+              </View>
               <Text style={[styles.tableCell, styles.colQty]}>{item.quantity}</Text>
               <Text style={[styles.tableCell, styles.colPrice]}>{formatCurrency(item.price)}</Text>
               <Text style={[styles.tableCell, styles.colTotal]}>
