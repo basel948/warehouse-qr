@@ -96,9 +96,11 @@ export default function AdminCouponsPage() {
             onChange={(e) => setDiscountPercent(e.target.value)}
             className="w-full sm:w-32 border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5 bg-[#f7f5f1]"
           >
+            <option value="5">5%</option>
             <option value="10">10%</option>
             <option value="15">15%</option>
             <option value="20">20%</option>
+            <option value="30">30%</option>
           </select>
           <button
             type="submit"

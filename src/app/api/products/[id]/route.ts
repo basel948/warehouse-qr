@@ -10,7 +10,7 @@ const updateProductSchema = z.object({
   price: z.number().positive().optional(),
   imageUrl: z.string().url().optional(),
   inStock: z.boolean().optional(),
-  categoryId: z.string().min(1).nullable().optional(),
+  categoryIds: z.array(z.string().min(1)).optional(),
   subcategoryId: z.string().min(1).nullable().optional(),
 });
 
@@ -25,10 +25,15 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const { categoryIds, ...rest } = parsed.data;
+
   const product = await prisma.product.update({
     where: { id: params.id },
-    data: parsed.data,
-    include: { category: true, subcategory: true },
+    data: {
+      ...rest,
+      categories: categoryIds ? { set: categoryIds.map((id) => ({ id })) } : undefined,
+    },
+    include: { categories: true, subcategory: true },
   });
   return NextResponse.json(product);
 }

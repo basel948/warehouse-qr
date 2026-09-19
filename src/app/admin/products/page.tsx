@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ImageUploadField } from "@/components/image-upload-field";
 import { PackageIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
@@ -25,11 +25,78 @@ type Product = {
   price: number;
   imageUrl: string | null;
   inStock: boolean;
-  categoryId: string | null;
-  category: Category | null;
+  categories: Category[];
   subcategoryId: string | null;
   subcategory: Subcategory | null;
 };
+
+function CategoryMultiSelect({
+  categories,
+  selectedIds,
+  onChange,
+  placeholder,
+}: {
+  categories: Category[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function toggle(id: string) {
+    onChange(
+      selectedIds.includes(id) ? selectedIds.filter((existing) => existing !== id) : [...selectedIds, id]
+    );
+  }
+
+  const label =
+    selectedIds.length === 0
+      ? placeholder
+      : categories
+          .filter((category) => selectedIds.includes(category.id))
+          .map((category) => category.name)
+          .join(", ");
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="w-full border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5 bg-white text-start truncate"
+      >
+        {label}
+      </button>
+      {open && (
+        <div className="absolute z-20 mt-1 w-full min-w-[180px] max-h-56 overflow-y-auto bg-white border border-[#e6e0d6] rounded-[10px] shadow-lg p-1.5 space-y-0.5">
+          {categories.map((category) => (
+            <label
+              key={category.id}
+              className="flex items-center gap-2 px-2.5 py-1.5 rounded-[7px] hover:bg-[#f7f5f1] text-sm cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(category.id)}
+                onChange={() => toggle(category.id)}
+              />
+              {category.name}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AdminProductsPage() {
   const { t } = useLocale();
@@ -42,7 +109,7 @@ export default function AdminProductsPage() {
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [imageUrl, setImageUrl] = useState("");
-  const [categoryId, setCategoryId] = useState("");
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [subcategoryId, setSubcategoryId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -172,7 +239,7 @@ export default function AdminProductsPage() {
         description: description || undefined,
         price: parsedPrice,
         imageUrl: imageUrl || undefined,
-        categoryId: categoryId || undefined,
+        categoryIds: categoryIds.length > 0 ? categoryIds : undefined,
         subcategoryId: subcategoryId || undefined,
       }),
     });
@@ -186,7 +253,7 @@ export default function AdminProductsPage() {
     setDescription("");
     setPrice("");
     setImageUrl("");
-    setCategoryId("");
+    setCategoryIds([]);
     setSubcategoryId("");
     loadAll();
   }
@@ -234,13 +301,20 @@ export default function AdminProductsPage() {
     loadAll();
   }
 
-  async function setProductCategory(product: Product, newCategoryId: string) {
-    // Clear subcategory too when the category changes, since a subcategory
-    // only makes sense under the category it was created for.
+  async function setProductCategories(product: Product, newCategoryIds: string[]) {
+    // A subcategory only makes sense under the category it was created for,
+    // so drop it if it no longer belongs to any of the product's categories.
+    const subcategoryStillValid = subcategories.some(
+      (subcategory) =>
+        subcategory.id === product.subcategoryId && newCategoryIds.includes(subcategory.categoryId)
+    );
     await fetch(`/api/products/${product.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ categoryId: newCategoryId || null, subcategoryId: null }),
+      body: JSON.stringify({
+        categoryIds: newCategoryIds,
+        ...(subcategoryStillValid ? {} : { subcategoryId: null }),
+      }),
     });
     loadAll();
   }
@@ -398,21 +472,17 @@ export default function AdminProductsPage() {
               onChange={(e) => setName(e.target.value)}
               className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
             />
-            <select
-              value={categoryId}
-              onChange={(e) => {
-                setCategoryId(e.target.value);
-                setSubcategoryId("");
+            <CategoryMultiSelect
+              categories={categories}
+              selectedIds={categoryIds}
+              onChange={(ids) => {
+                setCategoryIds(ids);
+                if (!subcategories.some((s) => s.id === subcategoryId && ids.includes(s.categoryId))) {
+                  setSubcategoryId("");
+                }
               }}
-              className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
-            >
-              <option value="">{t("admin.products.noCategoryOption")}</option>
-              {categories.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
+              placeholder={t("admin.products.noCategoryOption")}
+            />
             <input
               type="number"
               step="0.01"
@@ -422,7 +492,7 @@ export default function AdminProductsPage() {
               className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
             />
           </div>
-          {categoryId && subcategories.some((s) => s.categoryId === categoryId) && (
+          {categoryIds.length > 0 && subcategories.some((s) => categoryIds.includes(s.categoryId)) && (
             <select
               value={subcategoryId}
               onChange={(e) => setSubcategoryId(e.target.value)}
@@ -430,7 +500,7 @@ export default function AdminProductsPage() {
             >
               <option value="">{t("admin.products.noSubcategoryOption")}</option>
               {subcategories
-                .filter((s) => s.categoryId === categoryId)
+                .filter((s) => categoryIds.includes(s.categoryId))
                 .map((subcategory) => (
                   <option key={subcategory.id} value={subcategory.id}>
                     {subcategory.name}
@@ -575,27 +645,21 @@ export default function AdminProductsPage() {
                       )}
                       <span className="text-[#1a1714] truncate">{product.name}</span>
                     </div>
-                    <select
-                      value={product.categoryId ?? ""}
-                      onChange={(e) => setProductCategory(product, e.target.value)}
-                      className="border border-[#e6e0d6] rounded-[9px] px-2.5 py-1.5 text-sm bg-white"
-                    >
-                      <option value="">{t("admin.products.noCategoryOption")}</option>
-                      {categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
+                    <CategoryMultiSelect
+                      categories={categories}
+                      selectedIds={product.categories.map((category) => category.id)}
+                      onChange={(ids) => setProductCategories(product, ids)}
+                      placeholder={t("admin.products.noCategoryOption")}
+                    />
                     <select
                       value={product.subcategoryId ?? ""}
                       onChange={(e) => setProductSubcategory(product, e.target.value)}
-                      disabled={!product.categoryId}
+                      disabled={product.categories.length === 0}
                       className="border border-[#e6e0d6] rounded-[9px] px-2.5 py-1.5 text-sm bg-white disabled:opacity-50"
                     >
                       <option value="">{t("admin.products.noSubcategoryOption")}</option>
                       {subcategories
-                        .filter((s) => s.categoryId === product.categoryId)
+                        .filter((s) => product.categories.some((category) => category.id === s.categoryId))
                         .map((subcategory) => (
                           <option key={subcategory.id} value={subcategory.id}>
                             {subcategory.name}

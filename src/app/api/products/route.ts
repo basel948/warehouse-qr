@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   const products = await prisma.product.findMany({
     orderBy: { name: "asc" },
-    include: { category: true, subcategory: true },
+    include: { categories: true, subcategory: true },
   });
   return NextResponse.json(products);
 }
@@ -18,7 +18,7 @@ const createProductSchema = z.object({
   price: z.number().positive(),
   imageUrl: z.string().url().optional(),
   inStock: z.boolean().optional(),
-  categoryId: z.string().min(1).optional(),
+  categoryIds: z.array(z.string().min(1)).optional(),
   subcategoryId: z.string().min(1).optional(),
 });
 
@@ -33,9 +33,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const { categoryIds, ...rest } = parsed.data;
+
   const product = await prisma.product.create({
-    data: parsed.data,
-    include: { category: true, subcategory: true },
+    data: {
+      ...rest,
+      categories: categoryIds ? { connect: categoryIds.map((id) => ({ id })) } : undefined,
+    },
+    include: { categories: true, subcategory: true },
   });
   return NextResponse.json(product, { status: 201 });
 }

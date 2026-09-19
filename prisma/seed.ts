@@ -189,7 +189,9 @@ async function main() {
         description: product.description,
         price: product.price,
         inStock: true,
-        categoryId: categories.get(product.category),
+        categories: {
+          connect: categories.has(product.category) ? [{ id: categories.get(product.category) }] : [],
+        },
       },
     });
   }

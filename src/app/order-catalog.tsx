@@ -27,7 +27,7 @@ type Product = {
   price: number;
   imageUrl: string | null;
   inStock: boolean;
-  category: Category | null;
+  categories: Category[];
   subcategory: Subcategory | null;
 };
 
@@ -156,19 +156,26 @@ export function OrderCatalog({ products }: { products: Product[] }) {
     >();
 
     for (const product of displayedProducts) {
-      const key = product.category?.id ?? UNCATEGORIZED_KEY;
-      const name = product.category?.name ?? t("catalog.otherCategory");
-      const order = product.category?.order ?? Number.MAX_SAFE_INTEGER;
-      if (!byKey.has(key)) byKey.set(key, { key, name, order, subMap: new Map() });
-      const category = byKey.get(key)!;
+      // A product with no categories falls into the single "Other" bucket; a
+      // product with multiple categories is listed under each one, so it's
+      // discoverable from any of its category tabs.
+      const productCategories = product.categories.length > 0 ? product.categories : [null];
 
-      const subKey = product.subcategory?.id ?? UNCATEGORIZED_KEY;
-      const subName = product.subcategory?.name ?? null;
-      const subOrder = product.subcategory?.order ?? Number.MAX_SAFE_INTEGER;
-      if (!category.subMap.has(subKey)) {
-        category.subMap.set(subKey, { key: subKey, name: subName, order: subOrder, products: [] });
+      for (const productCategory of productCategories) {
+        const key = productCategory?.id ?? UNCATEGORIZED_KEY;
+        const name = productCategory?.name ?? t("catalog.otherCategory");
+        const order = productCategory?.order ?? Number.MAX_SAFE_INTEGER;
+        if (!byKey.has(key)) byKey.set(key, { key, name, order, subMap: new Map() });
+        const category = byKey.get(key)!;
+
+        const subKey = product.subcategory?.id ?? UNCATEGORIZED_KEY;
+        const subName = product.subcategory?.name ?? null;
+        const subOrder = product.subcategory?.order ?? Number.MAX_SAFE_INTEGER;
+        if (!category.subMap.has(subKey)) {
+          category.subMap.set(subKey, { key: subKey, name: subName, order: subOrder, products: [] });
+        }
+        category.subMap.get(subKey)!.products.push(product);
       }
-      category.subMap.get(subKey)!.products.push(product);
     }
 
     return Array.from(byKey.values())
@@ -844,9 +851,9 @@ function ProductDetailModal({
         <div className="p-[18px] pb-[22px]">
           <h2 className="text-lg font-bold text-[#1a1714] mb-1">{product.name}</h2>
           <p className="text-xl font-bold text-[#1a1714] mb-2">₪{product.price.toFixed(2)}</p>
-          {product.category && (
+          {(product.categories.length > 0 || product.subcategory) && (
             <p className="text-xs text-[#8a8177] mb-2">
-              {product.category.name}
+              {product.categories.map((category) => category.name).join(", ")}
               {product.subcategory ? ` · ${product.subcategory.name}` : ""}
             </p>
           )}

@@ -45,8 +45,7 @@ model Product {
   price         Float
   imageUrl      String?
   inStock       Boolean      @default(true)
-  category      Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  categoryId    String?
+  categories    Category[]
   subcategory   Subcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
   subcategoryId String?
   createdAt     DateTime     @default(now())

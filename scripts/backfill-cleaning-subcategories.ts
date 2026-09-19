@@ -58,7 +58,7 @@ async function main() {
   }
 
   const products = await prisma.product.findMany({
-    where: { categoryId: category.id, subcategoryId: null },
+    where: { categories: { some: { id: category.id } }, subcategoryId: null },
     select: { id: true, name: true },
   });
 
