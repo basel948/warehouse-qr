@@ -5,6 +5,8 @@ type OrderPdfMessage = {
   to: string;
   caption: string;
   pdfBuffer: Buffer;
+  /** Hebrew word used as the attached filename's prefix, e.g. "הזמנה" or "קבלה". */
+  filenameLabel?: string;
 };
 
 /**
@@ -39,7 +41,7 @@ export async function sendOrderPdfWhatsAppMessage(order: OrderPdfMessage): Promi
     throw new Error("WhatsApp is not configured: set WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID");
   }
 
-  const filename = `הזמנה-${order.orderId.slice(-6)}.pdf`;
+  const filename = `${order.filenameLabel ?? "הזמנה"}-${order.orderId.slice(-6)}.pdf`;
 
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(order.pdfBuffer)], { type: "application/pdf" }), filename);

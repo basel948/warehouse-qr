@@ -33,6 +33,12 @@ export function AdminNav() {
         >
           {t("nav.coupons")}
         </Link>
+        <Link
+          href="/admin/pay-later"
+          className="text-sm font-medium px-3 py-1.5 rounded-lg text-[#6b6259] hover:bg-[#f2efe9] hover:text-[#1a1714] transition-colors"
+        >
+          {t("nav.payLater")}
+        </Link>
         <div className="ms-auto flex items-center gap-3.5">
           <LanguageSwitcher />
           <button

@@ -67,6 +67,8 @@ model Order {
   businessName    String      @default("")
   customerPhone   String
   status          String      @default("PENDING") // PENDING | CONFIRMED | CANCELLED
+  paymentMethod   String      @default("CASH") // CASH | CREDIT | PAY_LATER
+  settledAt       DateTime? // pay-later orders only: when the buyer's monthly statement was marked paid
   whatsappSentAt  DateTime?
   buyerWhatsappSentAt DateTime?
   emailSentAt     DateTime?

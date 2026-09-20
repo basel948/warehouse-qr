@@ -1,12 +1,15 @@
 import { WAREHOUSE_NAME } from "@/lib/branding";
+import { PAYMENT_METHOD_LABEL_HE, type PaymentMethod } from "@/lib/payment-method";
 
 type OrderEmailMessage = {
   orderId: string;
   customerName: string;
   businessName: string;
   customerPhone: string;
+  paymentMethod: PaymentMethod;
   total: number;
   pdfBuffer: Buffer;
+  receiptPdfBuffer?: Buffer;
 };
 
 /**
@@ -47,9 +50,12 @@ export async function sendOrderEmail(order: OrderEmailMessage): Promise<void> {
             `שם מלא: ${order.customerName}`,
             `מעסיק מורשה / שם העסק: ${order.businessName || "-"}`,
             `מספר טלפון: ${order.customerPhone}`,
+            `אופן תשלום: ${PAYMENT_METHOD_LABEL_HE[order.paymentMethod]}`,
             `סה"כ: ₪${order.total.toFixed(2)}`,
             "",
-            "פרטי ההזמנה המלאים מצורפים כ-PDF.",
+            order.receiptPdfBuffer
+              ? "פרטי ההזמנה והקבלה מצורפים כ-PDF."
+              : "פרטי ההזמנה המלאים מצורפים כ-PDF.",
           ].join("\n"),
         },
       ],
@@ -60,6 +66,16 @@ export async function sendOrderEmail(order: OrderEmailMessage): Promise<void> {
           type: "application/pdf",
           disposition: "attachment",
         },
+        ...(order.receiptPdfBuffer
+          ? [
+              {
+                content: order.receiptPdfBuffer.toString("base64"),
+                filename: `קבלה-${order.orderId.slice(-6)}.pdf`,
+                type: "application/pdf",
+                disposition: "attachment",
+              },
+            ]
+          : []),
       ],
     }),
   });

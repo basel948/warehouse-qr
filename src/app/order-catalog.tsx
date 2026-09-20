@@ -2,11 +2,21 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
-import { CheckIcon, PackageIcon, PhoneIcon, SearchIcon, StarIcon } from "@/components/icons";
+import {
+  CashIcon,
+  CheckIcon,
+  ClockIcon,
+  CreditCardIcon,
+  PackageIcon,
+  PhoneIcon,
+  SearchIcon,
+  StarIcon,
+} from "@/components/icons";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
 import { WAREHOUSE_CONTACT_PHONE, WAREHOUSE_NAME } from "@/lib/branding";
 import { withCloudinaryTransform } from "@/lib/cloudinary-url";
+import { PAYMENT_METHOD, type PaymentMethod } from "@/lib/payment-method";
 
 type Category = {
   id: string;
@@ -876,6 +886,20 @@ function ProductDetailModal({
 
 type AppliedCoupon = { code: string; discountPercent: number };
 
+function formatCardNumber(value: string): string {
+  return value
+    .replace(/[^0-9]/g, "")
+    .slice(0, 16)
+    .replace(/(.{4})/g, "$1 ")
+    .trim();
+}
+
+function formatCardExpiry(value: string): string {
+  const digits = value.replace(/[^0-9]/g, "").slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+}
+
 function CheckoutSheet({
   products,
   cart,
@@ -893,6 +917,11 @@ function CheckoutSheet({
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [cardholderName, setCardholderName] = useState("");
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCvv, setCardCvv] = useState("");
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
@@ -954,6 +983,11 @@ function CheckoutSheet({
       return;
     }
 
+    if (!paymentMethod) {
+      setError(t("checkout.errorMissingPaymentMethod"));
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/orders", {
@@ -963,6 +997,7 @@ function CheckoutSheet({
           customerName,
           businessName,
           customerPhone,
+          paymentMethod,
           couponCode: appliedCoupon?.code,
           items: lines.map((line) => ({
             productId: line.product.id,
@@ -1125,6 +1160,74 @@ function CheckoutSheet({
               />
             </div>
 
+            <div className="mb-4">
+              <p className="text-[13px] font-semibold text-[#6b6259] mb-2">
+                {t("checkout.paymentMethodLabel")}
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <PaymentMethodButton
+                  active={paymentMethod === PAYMENT_METHOD.CASH}
+                  icon={<CashIcon className="w-5 h-5" />}
+                  label={t("checkout.paymentCash")}
+                  onClick={() => setPaymentMethod(PAYMENT_METHOD.CASH)}
+                />
+                <PaymentMethodButton
+                  active={paymentMethod === PAYMENT_METHOD.CREDIT}
+                  icon={<CreditCardIcon className="w-5 h-5" />}
+                  label={t("checkout.paymentCredit")}
+                  onClick={() => setPaymentMethod(PAYMENT_METHOD.CREDIT)}
+                />
+                <PaymentMethodButton
+                  active={paymentMethod === PAYMENT_METHOD.PAY_LATER}
+                  icon={<ClockIcon className="w-5 h-5" />}
+                  label={t("checkout.paymentPayLater")}
+                  onClick={() => setPaymentMethod(PAYMENT_METHOD.PAY_LATER)}
+                />
+              </div>
+
+              {paymentMethod === PAYMENT_METHOD.CREDIT && (
+                <div className="mt-3 border border-[#e6e0d6] rounded-xl p-3.5 bg-[#f7f5f1] space-y-2.5">
+                  <div className="flex items-center gap-2 text-[#6b6259]">
+                    <CreditCardIcon className="w-4 h-4" />
+                    <span className="text-[12px] font-semibold">{t("checkout.paymentCredit")}</span>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder={t("checkout.creditCardholderPlaceholder")}
+                    value={cardholderName}
+                    onChange={(e) => setCardholderName(e.target.value)}
+                    className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[11px] bg-white placeholder:text-[#a39a8e] text-sm"
+                  />
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder={t("checkout.creditCardNumberPlaceholder")}
+                    value={cardNumber}
+                    onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
+                    className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[11px] bg-white placeholder:text-[#a39a8e] text-sm tracking-wider"
+                  />
+                  <div className="flex gap-2.5">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder={t("checkout.creditExpiryPlaceholder")}
+                      value={cardExpiry}
+                      onChange={(e) => setCardExpiry(formatCardExpiry(e.target.value))}
+                      className="w-1/2 border border-[#e6e0d6] rounded-xl px-3.5 py-[11px] bg-white placeholder:text-[#a39a8e] text-sm"
+                    />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      placeholder={t("checkout.creditCvvPlaceholder")}
+                      value={cardCvv}
+                      onChange={(e) => setCardCvv(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
+                      className="w-1/2 border border-[#e6e0d6] rounded-xl px-3.5 py-[11px] bg-white placeholder:text-[#a39a8e] text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={submitOrder}
               disabled={submitting}
@@ -1137,5 +1240,30 @@ function CheckoutSheet({
         )}
       </div>
     </div>
+  );
+}
+
+function PaymentMethodButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border py-2.5 px-1.5 text-[11.5px] font-semibold leading-tight text-center text-[#4a443c] transition-colors ${
+        active ? "border-[var(--secondary)]" : "border-[#e6e0d6]"
+      }`}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

@@ -3,7 +3,8 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { generateOrderPdf } from "@/lib/order-pdf";
+import { PAYMENT_METHOD, PAYMENT_METHOD_LABEL_HE, type PaymentMethod } from "@/lib/payment-method";
+import { generateOrderPdf, generateOrderReceiptPdf } from "@/lib/order-pdf";
 import { sendOrderEmail } from "@/lib/order-email";
 import { sendOrderPdfWhatsAppMessage } from "@/lib/whatsapp";
 
@@ -24,6 +25,11 @@ const createOrderSchema = z.object({
   customerName: z.string().min(1),
   businessName: z.string().min(1),
   customerPhone: z.string().min(5),
+  paymentMethod: z.enum([
+    PAYMENT_METHOD.CASH,
+    PAYMENT_METHOD.CREDIT,
+    PAYMENT_METHOD.PAY_LATER,
+  ]),
   couponCode: z.string().min(1).optional(),
   items: z
     .array(
@@ -41,7 +47,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { customerName, businessName, customerPhone, couponCode, items } = parsed.data;
+  const { customerName, businessName, customerPhone, paymentMethod, couponCode, items } = parsed.data;
 
   const productIds = items.map((item) => item.productId);
   const products = await prisma.product.findMany({
@@ -72,6 +78,7 @@ export async function POST(request: Request) {
       customerName,
       businessName,
       customerPhone,
+      paymentMethod,
       couponCode: appliedCouponCode,
       discountPercent,
       items: {
@@ -99,6 +106,7 @@ export async function POST(request: Request) {
       customerName: order.customerName,
       businessName: order.businessName,
       customerPhone: order.customerPhone,
+      paymentMethod: order.paymentMethod as PaymentMethod,
       items: order.items.map((item) => ({
         productName: item.product.name,
         quantity: item.quantity,
@@ -111,15 +119,49 @@ export async function POST(request: Request) {
       total,
     });
 
+    // A receipt only makes sense once payment is actually taken at order
+    // time - currently that's credit only (cash is collected on delivery,
+    // pay-later is settled at month-end, so nothing's been paid yet).
+    const receiptPdfBuffer =
+      paymentMethod === PAYMENT_METHOD.CREDIT
+        ? await generateOrderReceiptPdf({
+            orderId: order.id,
+            createdAt: order.createdAt,
+            customerName: order.customerName,
+            businessName: order.businessName,
+            customerPhone: order.customerPhone,
+            paymentMethod: order.paymentMethod as PaymentMethod,
+            items: order.items.map((item) => ({
+              productName: item.product.name,
+              quantity: item.quantity,
+              price: item.price,
+              imageUrl: item.product.imageUrl,
+            })),
+            subtotal,
+            couponCode: appliedCouponCode,
+            discountPercent,
+            total,
+          })
+        : null;
+
     const ownerPhone = process.env.WAREHOUSE_OWNER_PHONE;
     try {
       if (!ownerPhone) throw new Error("WAREHOUSE_OWNER_PHONE is not configured");
       await sendOrderPdfWhatsAppMessage({
         orderId: order.id,
         to: ownerPhone,
-        caption: `הזמנה חדשה מ-${order.customerName} · סה"כ ₪${total.toFixed(2)}`,
+        caption: `הזמנה חדשה מ-${order.customerName} · סה"כ ₪${total.toFixed(2)} · ${PAYMENT_METHOD_LABEL_HE[paymentMethod]}`,
         pdfBuffer,
       });
+      if (receiptPdfBuffer) {
+        await sendOrderPdfWhatsAppMessage({
+          orderId: order.id,
+          to: ownerPhone,
+          caption: `קבלה עבור ההזמנה מ-${order.customerName} · סה"כ ₪${total.toFixed(2)}`,
+          pdfBuffer: receiptPdfBuffer,
+          filenameLabel: "קבלה",
+        });
+      }
       await prisma.order.update({
         where: { id: order.id },
         data: { whatsappSentAt: new Date() },
@@ -141,6 +183,15 @@ export async function POST(request: Request) {
         caption: `תודה על ההזמנה! מצורפת ההזמנה שלך · סה"כ ₪${total.toFixed(2)}`,
         pdfBuffer,
       });
+      if (receiptPdfBuffer) {
+        await sendOrderPdfWhatsAppMessage({
+          orderId: order.id,
+          to: order.customerPhone,
+          caption: `מצורפת הקבלה שלך · סה"כ ₪${total.toFixed(2)}`,
+          pdfBuffer: receiptPdfBuffer,
+          filenameLabel: "קבלה",
+        });
+      }
       await prisma.order.update({
         where: { id: order.id },
         data: { buyerWhatsappSentAt: new Date() },
@@ -157,8 +208,10 @@ export async function POST(request: Request) {
         customerName: order.customerName,
         businessName: order.businessName,
         customerPhone: order.customerPhone,
+        paymentMethod: order.paymentMethod as PaymentMethod,
         total,
         pdfBuffer,
+        receiptPdfBuffer: receiptPdfBuffer ?? undefined,
       });
       await prisma.order.update({
         where: { id: order.id },

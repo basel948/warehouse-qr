@@ -16,6 +16,7 @@ type Order = {
   customerName: string;
   businessName: string;
   customerPhone: string;
+  paymentMethod: string;
   status: string;
   whatsappSentAt: string | null;
   buyerWhatsappSentAt: string | null;
@@ -39,6 +40,12 @@ export default function AdminOrdersPage() {
     PENDING: t("admin.orders.statusPending"),
     CONFIRMED: t("admin.orders.statusConfirmed"),
     CANCELLED: t("admin.orders.statusCancelled"),
+  };
+
+  const paymentMethodLabels: Record<string, string> = {
+    CASH: t("checkout.paymentCash"),
+    CREDIT: t("checkout.paymentCredit"),
+    PAY_LATER: t("checkout.paymentPayLater"),
   };
 
   const filterLabels: Record<(typeof FILTERS)[number], string> = {
@@ -119,6 +126,9 @@ export default function AdminOrdersPage() {
                     <p className="text-[13px] text-[#6b6259]">{order.businessName}</p>
                   )}
                   <p className="text-[13px] text-[#6b6259]">{order.customerPhone}</p>
+                  <p className="text-[13px] text-[#6b6259]">
+                    {paymentMethodLabels[order.paymentMethod] ?? order.paymentMethod}
+                  </p>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-[#a39a8e]">

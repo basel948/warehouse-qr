@@ -2,6 +2,7 @@ import path from "node:path";
 import { Document, Font, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { WAREHOUSE_LOGO_URL, WAREHOUSE_NAME } from "@/lib/branding";
 import { withCloudinaryTransform } from "@/lib/cloudinary-url";
+import { PAYMENT_METHOD_LABEL_HE, type PaymentMethod } from "@/lib/payment-method";
 
 Font.register({
   family: "Alef",
@@ -24,6 +25,7 @@ export type OrderPdfData = {
   customerName: string;
   businessName: string;
   customerPhone: string;
+  paymentMethod: PaymentMethod;
   items: OrderPdfItem[];
   subtotal: number;
   couponCode: string | null;
@@ -88,6 +90,7 @@ const styles = StyleSheet.create({
   grandTotalRow: { flexDirection: "row", gap: 10, marginTop: 4, paddingTop: 6, borderTop: "1pt solid #d8d0c3" },
   grandTotalLabel: { fontSize: 11, fontWeight: "bold" },
   grandTotalValue: { fontSize: 11, fontWeight: "bold" },
+  paidStamp: { fontSize: 9, fontWeight: "bold", color: "#2f6b3a", marginBottom: 3, textAlign: "right" },
   footer: { position: "absolute", bottom: 24, left: 32, right: 32, fontSize: 8, color: "#a39a8e", textAlign: "center" },
 });
 
@@ -95,7 +98,24 @@ function formatCurrency(amount: number): string {
   return `₪${amount.toFixed(2)}`;
 }
 
-function OrderDocument({ order }: { order: OrderPdfData }) {
+type DocumentVariant = "order" | "receipt";
+
+const DOCUMENT_TITLE: Record<DocumentVariant, string> = {
+  order: "הזמנה חדשה",
+  receipt: "קבלה",
+};
+
+const DOCUMENT_NUMBER_LABEL: Record<DocumentVariant, string> = {
+  order: "מס' הזמנה",
+  receipt: "מס' קבלה",
+};
+
+const TOTAL_LABEL: Record<DocumentVariant, string> = {
+  order: "סה\"כ לתשלום",
+  receipt: "סה\"כ ששולם",
+};
+
+function OrderDocument({ order, variant }: { order: OrderPdfData; variant: DocumentVariant }) {
   const discountAmount = order.discountPercent ? order.subtotal * (order.discountPercent / 100) : 0;
 
   return (
@@ -103,8 +123,11 @@ function OrderDocument({ order }: { order: OrderPdfData }) {
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <View>
-            <Text style={styles.title}>הזמנה חדשה</Text>
-            <Text style={styles.meta}>מס&apos; הזמנה: {order.orderId.slice(-6)}</Text>
+            {variant === "receipt" && <Text style={styles.paidStamp}>שולם ✓</Text>}
+            <Text style={styles.title}>{DOCUMENT_TITLE[variant]}</Text>
+            <Text style={styles.meta}>
+              {DOCUMENT_NUMBER_LABEL[variant]}: {order.orderId.slice(-6)}
+            </Text>
             <Text style={styles.meta}>
               {order.createdAt.toLocaleDateString("he-IL")} {order.createdAt.toLocaleTimeString("he-IL")}
             </Text>
@@ -132,6 +155,10 @@ function OrderDocument({ order }: { order: OrderPdfData }) {
           <View style={styles.infoRow}>
             <Text style={styles.infoValue}>{order.customerPhone}</Text>
             <Text style={styles.infoLabel}>מספר טלפון</Text>
+          </View>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoValue}>{PAYMENT_METHOD_LABEL_HE[order.paymentMethod]}</Text>
+            <Text style={styles.infoLabel}>אופן תשלום</Text>
           </View>
         </View>
 
@@ -182,7 +209,7 @@ function OrderDocument({ order }: { order: OrderPdfData }) {
           )}
           <View style={styles.grandTotalRow}>
             <Text style={styles.grandTotalValue}>{formatCurrency(order.total)}</Text>
-            <Text style={styles.grandTotalLabel}>סה&quot;כ לתשלום</Text>
+            <Text style={styles.grandTotalLabel}>{TOTAL_LABEL[variant]}</Text>
           </View>
         </View>
 
@@ -193,5 +220,15 @@ function OrderDocument({ order }: { order: OrderPdfData }) {
 }
 
 export async function generateOrderPdf(order: OrderPdfData): Promise<Buffer> {
-  return renderToBuffer(<OrderDocument order={order} />);
+  return renderToBuffer(<OrderDocument order={order} variant="order" />);
+}
+
+/**
+ * A separate "receipt" document (same layout, marked as paid) - only
+ * meaningful for orders where payment was actually taken at order time
+ * (currently: credit). Not a legally-numbered tax invoice/קבלה - just an
+ * informal paid confirmation reusing the order's own reference number.
+ */
+export async function generateOrderReceiptPdf(order: OrderPdfData): Promise<Buffer> {
+  return renderToBuffer(<OrderDocument order={order} variant="receipt" />);
 }

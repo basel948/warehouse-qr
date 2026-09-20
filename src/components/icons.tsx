@@ -59,3 +59,32 @@ export function StarIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+export function CashIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="6" width="20" height="12" rx="2" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M6 6v12M18 6v12" />
+    </Svg>
+  );
+}
+
+export function CreditCardIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="5" width="20" height="14" rx="2" />
+      <path d="M2 10h20" />
+      <path d="M6 15h4" />
+    </Svg>
+  );
+}
+
+export function ClockIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" />
+    </Svg>
+  );
+}
