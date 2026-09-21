@@ -16,13 +16,16 @@ export function AdminNav() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const navItems = [
+    { href: "/admin", label: t("nav.dashboard") },
     { href: "/admin/products", label: t("nav.products") },
     { href: "/admin/orders", label: t("nav.orders") },
     { href: "/admin/coupons", label: t("nav.coupons") },
     { href: "/admin/pay-later", label: t("nav.payLater") },
   ];
 
-  const activeItem = navItems.find((item) => pathname?.startsWith(item.href));
+  const activeItem = navItems.find((item) =>
+    item.href === "/admin" ? pathname === "/admin" : pathname?.startsWith(item.href)
+  );
 
   useEffect(() => {
     setOpen(false);

@@ -6,6 +6,7 @@ export const dictionaries = {
   he: {
     nav: {
       pages: "עמודים",
+      dashboard: "ראשי",
       products: "מוצרים",
       orders: "הזמנות",
       coupons: "קופונים",
@@ -202,6 +203,7 @@ export const dictionaries = {
   ar: {
     nav: {
       pages: "الصفحات",
+      dashboard: "الرئيسية",
       products: "المنتجات",
       orders: "الطلبات",
       coupons: "كوبونات الخصم",
