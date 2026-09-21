@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ImageUploadField } from "@/components/image-upload-field";
-import { PackageIcon } from "@/components/icons";
+import { DuplicateIcon, EditIcon, PackageIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 
 type Category = {
@@ -256,6 +256,27 @@ export default function AdminProductsPage() {
     setCategoryIds([]);
     setSubcategoryId("");
     loadAll();
+  }
+
+  async function duplicateProduct(product: Product) {
+    const res = await fetch("/api/products", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: t("admin.products.duplicateName", { name: product.name }),
+        description: product.description || undefined,
+        price: product.price,
+        imageUrl: product.imageUrl || undefined,
+        inStock: product.inStock,
+        categoryIds: product.categories.map((category) => category.id),
+        subcategoryId: product.subcategoryId || undefined,
+      }),
+    });
+
+    if (!res.ok) return;
+    const newProduct: Product = await res.json();
+    await loadAll();
+    startEdit(newProduct);
   }
 
   function startEdit(product: Product) {
@@ -681,23 +702,45 @@ export default function AdminProductsPage() {
                       </span>
                       <button
                         onClick={() => toggleStock(product)}
-                        className="text-[13px] text-[#6b6259] underline"
+                        title={
+                          product.inStock
+                            ? t("admin.products.markOutOfStock")
+                            : t("admin.products.markInStock")
+                        }
+                        aria-label={
+                          product.inStock
+                            ? t("admin.products.markOutOfStock")
+                            : t("admin.products.markInStock")
+                        }
+                        className={`w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e6e0d6] ${
+                          product.inStock ? "text-[#2f6b3a]" : "text-[#8a8177]"
+                        }`}
                       >
-                        {product.inStock
-                          ? t("admin.products.markOutOfStock")
-                          : t("admin.products.markInStock")}
+                        <PackageIcon className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => startEdit(product)}
-                        className="text-[13px] text-[#6b6259] underline"
+                        title={t("admin.products.edit")}
+                        aria-label={t("admin.products.edit")}
+                        className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e6e0d6] text-[#6b6259]"
                       >
-                        {t("admin.products.edit")}
+                        <EditIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => duplicateProduct(product)}
+                        title={t("admin.products.duplicate")}
+                        aria-label={t("admin.products.duplicate")}
+                        className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e6e0d6] text-[#6b6259]"
+                      >
+                        <DuplicateIcon className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => deleteProduct(product.id)}
-                        className="text-[13px] text-[#b3402e] underline"
+                        title={t("admin.products.delete")}
+                        aria-label={t("admin.products.delete")}
+                        className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e6e0d6] text-[#b3402e]"
                       >
-                        {t("admin.products.delete")}
+                        <TrashIcon className="w-4 h-4" />
                       </button>
                     </div>
                   </li>
