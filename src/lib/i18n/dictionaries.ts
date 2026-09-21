@@ -5,6 +5,7 @@ import type { Locale } from "./locales";
 export const dictionaries = {
   he: {
     nav: {
+      pages: "עמודים",
       products: "מוצרים",
       orders: "הזמנות",
       coupons: "קופונים",
@@ -200,6 +201,7 @@ export const dictionaries = {
   },
   ar: {
     nav: {
+      pages: "الصفحات",
       products: "المنتجات",
       orders: "الطلبات",
       coupons: "كوبونات الخصم",

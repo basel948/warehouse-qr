@@ -1,13 +1,42 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { BrandLogo } from "@/components/brand-logo";
+import { ChevronDownIcon } from "@/components/icons";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
 
 export function AdminNav() {
   const { t } = useLocale();
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const navItems = [
+    { href: "/admin/products", label: t("nav.products") },
+    { href: "/admin/orders", label: t("nav.orders") },
+    { href: "/admin/coupons", label: t("nav.coupons") },
+    { href: "/admin/pay-later", label: t("nav.payLater") },
+  ];
+
+  const activeItem = navItems.find((item) => pathname?.startsWith(item.href));
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
     <nav className="bg-white border-b border-[#eae5dc] mb-6">
@@ -15,32 +44,35 @@ export function AdminNav() {
         <Link href="/admin" className="shrink-0">
           <BrandLogo size="sm" />
         </Link>
-        <div className="flex items-center gap-1 min-w-0 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <Link
-            href="/admin/products"
-            className="shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg text-[#6b6259] hover:bg-[#f2efe9] hover:text-[#1a1714] transition-colors"
+
+        <div className="relative" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setOpen((prev) => !prev)}
+            className="flex items-center gap-1.5 text-sm font-medium px-3.5 py-1.5 rounded-full border border-[#1a1714] text-[#1a1714] hover:bg-[#f2efe9] transition-colors"
           >
-            {t("nav.products")}
-          </Link>
-          <Link
-            href="/admin/orders"
-            className="shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg text-[#6b6259] hover:bg-[#f2efe9] hover:text-[#1a1714] transition-colors"
-          >
-            {t("nav.orders")}
-          </Link>
-          <Link
-            href="/admin/coupons"
-            className="shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg text-[#6b6259] hover:bg-[#f2efe9] hover:text-[#1a1714] transition-colors"
-          >
-            {t("nav.coupons")}
-          </Link>
-          <Link
-            href="/admin/pay-later"
-            className="shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg text-[#6b6259] hover:bg-[#f2efe9] hover:text-[#1a1714] transition-colors"
-          >
-            {t("nav.payLater")}
-          </Link>
+            {activeItem?.label ?? t("nav.pages")}
+            <ChevronDownIcon className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
+          </button>
+          {open && (
+            <div className="absolute top-full start-0 mt-1.5 min-w-[160px] bg-white border border-[#e6e0d6] rounded-[10px] shadow-lg p-1.5 z-20">
+              {navItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={`block text-sm font-medium px-3 py-2 rounded-[7px] transition-colors ${
+                    activeItem?.href === item.href
+                      ? "bg-[#f2efe9] text-[#1a1714]"
+                      : "text-[#6b6259] hover:bg-[#f7f5f1] hover:text-[#1a1714]"
+                  }`}
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
+
         <div className="ms-auto shrink-0 flex items-center gap-3.5">
           <LanguageSwitcher />
           <button
