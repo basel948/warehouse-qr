@@ -929,7 +929,7 @@ function CheckoutSheet({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{
-    whatsappError: string | null;
+    emailError: string | null;
     discountAmount: number;
     couponCode: string | null;
   } | null>(null);
@@ -1013,7 +1013,7 @@ function CheckoutSheet({
       }
 
       setSuccess({
-        whatsappError: data.whatsappError,
+        emailError: data.emailError,
         discountAmount: data.discountAmount ?? 0,
         couponCode: data.order.couponCode,
       });
@@ -1034,9 +1034,7 @@ function CheckoutSheet({
             </div>
             <p className="font-bold text-[18px] text-[#1a1714] mb-2">{t("checkout.successTitle")}</p>
             <p className="text-sm text-[#6b6259] mb-1.5">
-              {success.whatsappError
-                ? t("checkout.whatsappPending")
-                : t("checkout.whatsappSent")}
+              {success.emailError ? t("checkout.emailPending") : t("checkout.emailSent")}
             </p>
             {success.couponCode && (
               <p className="text-[13px] font-semibold text-[#2f6b3a] mb-2">

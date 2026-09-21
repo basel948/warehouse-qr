@@ -8,6 +8,11 @@ import { generateOrderPdf, generateOrderReceiptPdf } from "@/lib/order-pdf";
 import { sendOrderEmail } from "@/lib/order-email";
 import { sendOrderPdfWhatsAppMessage } from "@/lib/whatsapp";
 
+// Paused on the owner's request while the WhatsApp Business number/template
+// setup is still pending - orders only go out by email for now. Flip back
+// to true once that's ready.
+const ORDER_WHATSAPP_NOTIFICATIONS_ENABLED = false;
+
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -144,62 +149,64 @@ export async function POST(request: Request) {
           })
         : null;
 
-    const ownerPhone = process.env.WAREHOUSE_OWNER_PHONE;
-    try {
-      if (!ownerPhone) throw new Error("WAREHOUSE_OWNER_PHONE is not configured");
-      await sendOrderPdfWhatsAppMessage({
-        orderId: order.id,
-        to: ownerPhone,
-        caption: `הזמנה חדשה מ-${order.customerName} · סה"כ ₪${total.toFixed(2)} · ${PAYMENT_METHOD_LABEL_HE[paymentMethod]}`,
-        pdfBuffer,
-      });
-      if (receiptPdfBuffer) {
+    if (ORDER_WHATSAPP_NOTIFICATIONS_ENABLED) {
+      const ownerPhone = process.env.WAREHOUSE_OWNER_PHONE;
+      try {
+        if (!ownerPhone) throw new Error("WAREHOUSE_OWNER_PHONE is not configured");
         await sendOrderPdfWhatsAppMessage({
           orderId: order.id,
           to: ownerPhone,
-          caption: `קבלה עבור ההזמנה מ-${order.customerName} · סה"כ ₪${total.toFixed(2)}`,
-          pdfBuffer: receiptPdfBuffer,
-          filenameLabel: "קבלה",
+          caption: `הזמנה חדשה מ-${order.customerName} · סה"כ ₪${total.toFixed(2)} · ${PAYMENT_METHOD_LABEL_HE[paymentMethod]}`,
+          pdfBuffer,
         });
+        if (receiptPdfBuffer) {
+          await sendOrderPdfWhatsAppMessage({
+            orderId: order.id,
+            to: ownerPhone,
+            caption: `קבלה עבור ההזמנה מ-${order.customerName} · סה"כ ₪${total.toFixed(2)}`,
+            pdfBuffer: receiptPdfBuffer,
+            filenameLabel: "קבלה",
+          });
+        }
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { whatsappSentAt: new Date() },
+        });
+      } catch (error) {
+        whatsappError = error instanceof Error ? error.message : "Unknown WhatsApp error";
+        console.error("Failed to send WhatsApp order notification:", whatsappError);
       }
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { whatsappSentAt: new Date() },
-      });
-    } catch (error) {
-      whatsappError = error instanceof Error ? error.message : "Unknown WhatsApp error";
-      console.error("Failed to send WhatsApp order notification:", whatsappError);
-    }
 
-    // Best-effort: send the buyer their own copy too. Unlike the owner (who
-    // can stay in Meta's 24h session window by messaging the business number
-    // periodically), a first-time buyer usually hasn't - so this will often
-    // fail until an approved message template is set up. That's expected and
-    // shouldn't block anything, same as the sends above.
-    try {
-      await sendOrderPdfWhatsAppMessage({
-        orderId: order.id,
-        to: order.customerPhone,
-        caption: `תודה על ההזמנה! מצורפת ההזמנה שלך · סה"כ ₪${total.toFixed(2)}`,
-        pdfBuffer,
-      });
-      if (receiptPdfBuffer) {
+      // Best-effort: send the buyer their own copy too. Unlike the owner (who
+      // can stay in Meta's 24h session window by messaging the business number
+      // periodically), a first-time buyer usually hasn't - so this will often
+      // fail until an approved message template is set up. That's expected and
+      // shouldn't block anything, same as the sends above.
+      try {
         await sendOrderPdfWhatsAppMessage({
           orderId: order.id,
           to: order.customerPhone,
-          caption: `מצורפת הקבלה שלך · סה"כ ₪${total.toFixed(2)}`,
-          pdfBuffer: receiptPdfBuffer,
-          filenameLabel: "קבלה",
+          caption: `תודה על ההזמנה! מצורפת ההזמנה שלך · סה"כ ₪${total.toFixed(2)}`,
+          pdfBuffer,
         });
+        if (receiptPdfBuffer) {
+          await sendOrderPdfWhatsAppMessage({
+            orderId: order.id,
+            to: order.customerPhone,
+            caption: `מצורפת הקבלה שלך · סה"כ ₪${total.toFixed(2)}`,
+            pdfBuffer: receiptPdfBuffer,
+            filenameLabel: "קבלה",
+          });
+        }
+        await prisma.order.update({
+          where: { id: order.id },
+          data: { buyerWhatsappSentAt: new Date() },
+        });
+      } catch (error) {
+        const buyerWhatsappError =
+          error instanceof Error ? error.message : "Unknown WhatsApp error";
+        console.error("Failed to send buyer's WhatsApp order copy:", buyerWhatsappError);
       }
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { buyerWhatsappSentAt: new Date() },
-      });
-    } catch (error) {
-      const buyerWhatsappError =
-        error instanceof Error ? error.message : "Unknown WhatsApp error";
-      console.error("Failed to send buyer's WhatsApp order copy:", buyerWhatsappError);
     }
 
     try {

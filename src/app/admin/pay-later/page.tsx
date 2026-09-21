@@ -15,6 +15,7 @@ type Order = {
   id: string;
   businessName: string;
   customerName: string;
+  customerPhone: string;
   paymentMethod: string;
   settledAt: string | null;
   couponCode: string | null;
@@ -24,7 +25,8 @@ type Order = {
 };
 
 type MonthGroup = {
-  businessName: string;
+  customerPhone: string;
+  customerName: string;
   month: string; // "YYYY-MM"
   orders: Order[];
   total: number;
@@ -68,9 +70,16 @@ export default function AdminPayLaterPage() {
     for (const order of orders) {
       if (order.paymentMethod !== PAYMENT_METHOD.PAY_LATER) continue;
       const month = order.createdAt.slice(0, 7); // "YYYY-MM"
-      const key = `${order.businessName}__${month}`;
+      const key = `${order.customerPhone}__${month}`;
       if (!byKey.has(key)) {
-        byKey.set(key, { businessName: order.businessName, month, orders: [], total: 0, settled: true });
+        byKey.set(key, {
+          customerPhone: order.customerPhone,
+          customerName: order.customerName,
+          month,
+          orders: [],
+          total: 0,
+          settled: true,
+        });
       }
       const group = byKey.get(key)!;
       group.orders.push(order);
@@ -79,7 +88,7 @@ export default function AdminPayLaterPage() {
     }
     return Array.from(byKey.values()).sort((a, b) => {
       if (a.month !== b.month) return b.month.localeCompare(a.month);
-      return a.businessName.localeCompare(b.businessName);
+      return a.customerPhone.localeCompare(b.customerPhone);
     });
   }, [orders]);
 
@@ -90,13 +99,13 @@ export default function AdminPayLaterPage() {
   });
 
   async function toggleSettled(group: MonthGroup) {
-    const key = `${group.businessName}__${group.month}`;
+    const key = `${group.customerPhone}__${group.month}`;
     setSettlingKey(key);
     await fetch("/api/orders/pay-later/settle", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        businessName: group.businessName,
+        customerPhone: group.customerPhone,
         month: group.month,
         settled: !group.settled,
       }),
@@ -149,13 +158,14 @@ export default function AdminPayLaterPage() {
 
       <ul className="space-y-3.5">
         {visibleGroups.map((group) => {
-          const key = `${group.businessName}__${group.month}`;
+          const key = `${group.customerPhone}__${group.month}`;
           const orderCount = group.orders.length;
           return (
             <li key={key} className="bg-white border border-[#eae5dc] rounded-[14px] p-[18px]">
               <div className="flex items-start justify-between gap-4 mb-3.5">
                 <div>
-                  <p className="font-semibold text-[15px] text-[#1a1714]">{group.businessName}</p>
+                  <p className="font-semibold text-[15px] text-[#1a1714]">{group.customerPhone}</p>
+                  <p className="text-[13px] text-[#6b6259]">{group.customerName}</p>
                   <p className="text-[13px] text-[#6b6259]">{formatMonth(group.month)}</p>
                   <p className="text-xs text-[#a39a8e] mt-0.5">
                     {orderCount === 1

@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { PAYMENT_METHOD } from "@/lib/payment-method";
 
 const settleSchema = z.object({
-  businessName: z.string().min(1),
+  customerPhone: z.string().min(1),
   month: z.string().regex(/^\d{4}-\d{2}$/), // "YYYY-MM"
   settled: z.boolean(),
 });
@@ -22,14 +22,14 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { businessName, month, settled } = parsed.data;
+  const { customerPhone, month, settled } = parsed.data;
   const [year, monthNum] = month.split("-").map(Number);
   const rangeStart = new Date(year, monthNum - 1, 1);
   const rangeEnd = new Date(year, monthNum, 1);
 
   const result = await prisma.order.updateMany({
     where: {
-      businessName,
+      customerPhone,
       paymentMethod: PAYMENT_METHOD.PAY_LATER,
       createdAt: { gte: rangeStart, lt: rangeEnd },
     },
