@@ -25,6 +25,9 @@ type Product = {
   price: number;
   imageUrl: string | null;
   inStock: boolean;
+  onSale: boolean;
+  salePrice: number | null;
+  saleBannerImageUrl: string | null;
   categories: Category[];
   subcategoryId: string | null;
   subcategory: Subcategory | null;
@@ -127,6 +130,9 @@ export default function AdminProductsPage() {
   const [editDescription, setEditDescription] = useState("");
   const [editPrice, setEditPrice] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
+  const [editOnSale, setEditOnSale] = useState(false);
+  const [editSalePrice, setEditSalePrice] = useState("");
+  const [editSaleBannerImageUrl, setEditSaleBannerImageUrl] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
   async function loadAll() {
@@ -285,6 +291,9 @@ export default function AdminProductsPage() {
     setEditDescription(product.description ?? "");
     setEditPrice(String(product.price));
     setEditImageUrl(product.imageUrl ?? "");
+    setEditOnSale(product.onSale);
+    setEditSalePrice(product.salePrice != null ? String(product.salePrice) : "");
+    setEditSaleBannerImageUrl(product.saleBannerImageUrl ?? "");
     setEditError(null);
   }
 
@@ -302,6 +311,12 @@ export default function AdminProductsPage() {
       return;
     }
 
+    const parsedSalePrice = editSalePrice.trim() === "" ? null : Number(editSalePrice);
+    if (editOnSale && (parsedSalePrice == null || !Number.isFinite(parsedSalePrice) || parsedSalePrice <= 0 || parsedSalePrice >= parsedPrice)) {
+      setEditError(t("admin.products.invalidSalePrice"));
+      return;
+    }
+
     const res = await fetch(`/api/products/${productId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -310,6 +325,9 @@ export default function AdminProductsPage() {
         description: editDescription || undefined,
         price: parsedPrice,
         imageUrl: editImageUrl || undefined,
+        onSale: editOnSale,
+        salePrice: editOnSale ? parsedSalePrice : null,
+        saleBannerImageUrl: editOnSale ? editSaleBannerImageUrl || null : null,
       }),
     });
 
@@ -356,6 +374,19 @@ export default function AdminProductsPage() {
       body: JSON.stringify({ inStock: !product.inStock }),
     });
     loadAll();
+  }
+
+  function toggleSale(product: Product) {
+    if (product.onSale) {
+      fetch(`/api/products/${product.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ onSale: false, salePrice: null, saleBannerImageUrl: null }),
+      }).then(loadAll);
+      return;
+    }
+    startEdit(product);
+    setEditOnSale(true);
   }
 
   async function deleteProduct(id: string) {
@@ -612,6 +643,46 @@ export default function AdminProductsPage() {
                         onChange={(e) => setEditDescription(e.target.value)}
                         className="w-full border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
                       />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <label className="flex items-center gap-1.5 text-sm text-[#4a443c]">
+                          <input
+                            type="checkbox"
+                            checked={editOnSale}
+                            onChange={(e) => setEditOnSale(e.target.checked)}
+                          />
+                          {t("admin.products.onSaleLabel")}
+                        </label>
+                        {editOnSale && (
+                          <input
+                            type="number"
+                            step="0.01"
+                            placeholder={t("admin.products.salePricePlaceholder")}
+                            value={editSalePrice}
+                            onChange={(e) => setEditSalePrice(e.target.value)}
+                            className="w-28 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+                          />
+                        )}
+                      </div>
+                      {editOnSale && (
+                        <div>
+                          <p className="text-xs text-[#8a8177] mb-1.5">
+                            {t("admin.products.saleBannerLabel")}
+                          </p>
+                          <ImageUploadField
+                            value={editSaleBannerImageUrl}
+                            onChange={setEditSaleBannerImageUrl}
+                            uploadLabel={t("admin.products.uploadImage")}
+                            uploadingLabel={t("admin.products.uploading")}
+                            hintText={t("admin.products.saleBannerHint")}
+                            errorMessages={{
+                              notImage: t("admin.products.uploadErrorNotImage"),
+                              tooLarge: t("admin.products.uploadErrorTooLarge"),
+                              network: t("admin.products.uploadErrorNetwork"),
+                              generic: t("admin.products.uploadErrorGeneric"),
+                            }}
+                          />
+                        </div>
+                      )}
                       <ImageUploadField
                         value={editImageUrl}
                         onChange={setEditImageUrl}
@@ -687,7 +758,20 @@ export default function AdminProductsPage() {
                           </option>
                         ))}
                     </select>
-                    <span className="text-[#1a1714] font-semibold">₪{product.price.toFixed(2)}</span>
+                    <span className="flex flex-col leading-tight">
+                      {product.onSale && product.salePrice != null ? (
+                        <>
+                          <span className="text-[#b3402e] font-semibold">
+                            ₪{product.salePrice.toFixed(2)}
+                          </span>
+                          <span className="text-[#a39a8e] text-xs line-through">
+                            ₪{product.price.toFixed(2)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[#1a1714] font-semibold">₪{product.price.toFixed(2)}</span>
+                      )}
+                    </span>
                     <div className="flex items-center gap-2.5 flex-wrap">
                       <span
                         className={`text-xs font-semibold rounded-full px-2.5 py-1 ${
@@ -717,6 +801,26 @@ export default function AdminProductsPage() {
                         }`}
                       >
                         <PackageIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => toggleSale(product)}
+                        title={
+                          product.onSale
+                            ? t("admin.products.removeFromSale")
+                            : t("admin.products.markOnSale")
+                        }
+                        aria-label={
+                          product.onSale
+                            ? t("admin.products.removeFromSale")
+                            : t("admin.products.markOnSale")
+                        }
+                        className={`w-8 h-8 flex items-center justify-center rounded-[8px] border text-sm font-bold ${
+                          product.onSale
+                            ? "border-[var(--accent)] text-[var(--accent)]"
+                            : "border-[#e6e0d6] text-[#8a8177]"
+                        }`}
+                      >
+                        %
                       </button>
                       <button
                         onClick={() => startEdit(product)}

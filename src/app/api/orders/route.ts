@@ -7,6 +7,7 @@ import { PAYMENT_METHOD, PAYMENT_METHOD_LABEL_HE, type PaymentMethod } from "@/l
 import { generateOrderPdf, generateOrderReceiptPdf } from "@/lib/order-pdf";
 import { sendOrderEmail } from "@/lib/order-email";
 import { sendOrderPdfWhatsAppMessage } from "@/lib/whatsapp";
+import { getEffectivePrice } from "@/lib/effective-price";
 
 // Paused on the owner's request while the WhatsApp Business number/template
 // setup is still pending - orders only go out by email for now. Flip back
@@ -90,7 +91,7 @@ export async function POST(request: Request) {
         create: items.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,
-          price: productById.get(item.productId)!.price,
+          price: getEffectivePrice(productById.get(item.productId)!),
         })),
       },
     },

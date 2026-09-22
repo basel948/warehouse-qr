@@ -12,15 +12,23 @@ export async function GET() {
   return NextResponse.json(products);
 }
 
-const createProductSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().optional(),
-  price: z.number().positive(),
-  imageUrl: z.string().url().optional(),
-  inStock: z.boolean().optional(),
-  categoryIds: z.array(z.string().min(1)).optional(),
-  subcategoryId: z.string().min(1).optional(),
-});
+const createProductSchema = z
+  .object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+    price: z.number().positive(),
+    imageUrl: z.string().url().optional(),
+    inStock: z.boolean().optional(),
+    onSale: z.boolean().optional(),
+    salePrice: z.number().positive().optional(),
+    saleBannerImageUrl: z.string().url().optional(),
+    categoryIds: z.array(z.string().min(1)).optional(),
+    subcategoryId: z.string().min(1).optional(),
+  })
+  .refine((data) => !data.onSale || (data.salePrice != null && data.salePrice < data.price), {
+    message: "salePrice must be set and lower than price when onSale is true",
+    path: ["salePrice"],
+  });
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
