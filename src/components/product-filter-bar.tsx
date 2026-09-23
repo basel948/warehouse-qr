@@ -29,7 +29,7 @@ export function ProductFilterBar({
   const { t } = useLocale();
 
   return (
-    <div className="flex flex-wrap items-center justify-end gap-2 mb-3">
+    <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
       <label className="flex items-center gap-1.5 text-sm text-[#4a443c]">
         <input
           type="checkbox"
