@@ -131,7 +131,9 @@ export default function AdminProductsPage() {
   const [editPrice, setEditPrice] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
   const [editOnSale, setEditOnSale] = useState(false);
+  const [editSaleMode, setEditSaleMode] = useState<"amount" | "percent">("amount");
   const [editSalePrice, setEditSalePrice] = useState("");
+  const [editSalePercent, setEditSalePercent] = useState("");
   const [editSaleBannerImageUrl, setEditSaleBannerImageUrl] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -292,7 +294,9 @@ export default function AdminProductsPage() {
     setEditPrice(String(product.price));
     setEditImageUrl(product.imageUrl ?? "");
     setEditOnSale(product.onSale);
+    setEditSaleMode("amount");
     setEditSalePrice(product.salePrice != null ? String(product.salePrice) : "");
+    setEditSalePercent("");
     setEditSaleBannerImageUrl(product.saleBannerImageUrl ?? "");
     setEditError(null);
   }
@@ -311,10 +315,28 @@ export default function AdminProductsPage() {
       return;
     }
 
-    const parsedSalePrice = editSalePrice.trim() === "" ? null : Number(editSalePrice);
-    if (editOnSale && (parsedSalePrice == null || !Number.isFinite(parsedSalePrice) || parsedSalePrice <= 0 || parsedSalePrice >= parsedPrice)) {
-      setEditError(t("admin.products.invalidSalePrice"));
-      return;
+    let parsedSalePrice: number | null = null;
+    if (editOnSale) {
+      if (editSaleMode === "percent") {
+        const parsedPercent = Number(editSalePercent);
+        if (!Number.isFinite(parsedPercent) || parsedPercent <= 0 || parsedPercent >= 100) {
+          setEditError(t("admin.products.invalidSalePercent"));
+          return;
+        }
+        parsedSalePrice = Math.round(parsedPrice * (1 - parsedPercent / 100) * 100) / 100;
+      } else {
+        parsedSalePrice = editSalePrice.trim() === "" ? null : Number(editSalePrice);
+      }
+
+      if (
+        parsedSalePrice == null ||
+        !Number.isFinite(parsedSalePrice) ||
+        parsedSalePrice <= 0 ||
+        parsedSalePrice >= parsedPrice
+      ) {
+        setEditError(t("admin.products.invalidSalePrice"));
+        return;
+      }
     }
 
     const res = await fetch(`/api/products/${productId}`, {
@@ -653,16 +675,70 @@ export default function AdminProductsPage() {
                           {t("admin.products.onSaleLabel")}
                         </label>
                         {editOnSale && (
-                          <input
-                            type="number"
-                            step="0.01"
-                            placeholder={t("admin.products.salePricePlaceholder")}
-                            value={editSalePrice}
-                            onChange={(e) => setEditSalePrice(e.target.value)}
-                            className="w-28 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
-                          />
+                          <>
+                            <div className="flex rounded-[9px] border border-[#e6e0d6] overflow-hidden text-sm">
+                              <button
+                                type="button"
+                                onClick={() => setEditSaleMode("amount")}
+                                className={`px-2.5 py-2 ${
+                                  editSaleMode === "amount" ? "bg-[#1a1714] text-white" : "bg-white text-[#4a443c]"
+                                }`}
+                              >
+                                {t("admin.products.salePriceModeAmount")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditSaleMode("percent")}
+                                className={`px-2.5 py-2 ${
+                                  editSaleMode === "percent" ? "bg-[#1a1714] text-white" : "bg-white text-[#4a443c]"
+                                }`}
+                              >
+                                {t("admin.products.salePriceModePercent")}
+                              </button>
+                            </div>
+                            {editSaleMode === "amount" ? (
+                              <input
+                                type="number"
+                                step="0.01"
+                                placeholder={t("admin.products.salePricePlaceholder")}
+                                value={editSalePrice}
+                                onChange={(e) => setEditSalePrice(e.target.value)}
+                                className="w-28 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+                              />
+                            ) : (
+                              <input
+                                type="number"
+                                step="1"
+                                placeholder={t("admin.products.salePercentPlaceholder")}
+                                value={editSalePercent}
+                                onChange={(e) => setEditSalePercent(e.target.value)}
+                                className="w-24 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+                              />
+                            )}
+                          </>
                         )}
                       </div>
+                      {editOnSale &&
+                        editSaleMode === "percent" &&
+                        (() => {
+                          const priceNum = Number(editPrice);
+                          const percentNum = Number(editSalePercent);
+                          if (
+                            !Number.isFinite(priceNum) ||
+                            priceNum <= 0 ||
+                            !Number.isFinite(percentNum) ||
+                            percentNum <= 0 ||
+                            percentNum >= 100
+                          ) {
+                            return null;
+                          }
+                          const preview = Math.round(priceNum * (1 - percentNum / 100) * 100) / 100;
+                          return (
+                            <p className="text-xs text-[#8a8177]">
+                              {t("admin.products.salePricePreview", { amount: preview.toFixed(2) })}
+                            </p>
+                          );
+                        })()}
                       {editOnSale && (
                         <div>
                           <p className="text-xs text-[#8a8177] mb-1.5">

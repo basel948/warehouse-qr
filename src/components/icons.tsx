@@ -267,3 +267,14 @@ export function PlateIcon(props: IconProps) {
     </Svg>
   );
 }
+
+export function BatteryIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="7" width="17" height="10" rx="2" />
+      <line x1="22" y1="10.5" x2="22" y2="13.5" />
+      <line x1="6" y1="10" x2="6" y2="14" />
+      <line x1="10" y1="10" x2="10" y2="14" />
+    </Svg>
+  );
+}

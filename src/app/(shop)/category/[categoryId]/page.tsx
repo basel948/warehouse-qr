@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { SubcategoryGrid } from "./subcategory-grid";
+import { CategorySections } from "./category-sections";
 
 export const dynamic = "force-dynamic";
 
@@ -21,16 +21,17 @@ export default async function CategoryPage({
 
   if (!category) notFound();
 
-  const otherCount = await prisma.product.count({
-    where: { categories: { some: { id: category.id } }, subcategoryId: null },
+  const products = await prisma.product.findMany({
+    where: { categories: { some: { id: category.id } } },
+    orderBy: { name: "asc" },
+    include: { categories: true, subcategory: true },
   });
 
   return (
-    <SubcategoryGrid
-      categoryId={category.id}
+    <CategorySections
       categoryName={category.name}
       subcategories={category.subcategories}
-      hasOther={otherCount > 0}
+      products={products}
     />
   );
 }

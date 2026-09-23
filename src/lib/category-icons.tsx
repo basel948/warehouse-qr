@@ -1,6 +1,7 @@
 import {
   BagIcon,
   BathtubIcon,
+  BatteryIcon,
   BucketIcon,
   DotsIcon,
   DropletIcon,
@@ -38,6 +39,8 @@ const EXACT_MATCHES: Record<string, IconComponent> = {
   "ניקוי אסלה ואמבטיה": BathtubIcon,
   "כביסה": WashingMachineIcon,
   "ניקוי כלים": PlateIcon,
+  "סוללות": BatteryIcon,
+  "סוללה": BatteryIcon,
 };
 
 const SUBSTRING_MATCHES: Array<[string, IconComponent]> = [
@@ -54,6 +57,7 @@ const SUBSTRING_MATCHES: Array<[string, IconComponent]> = [
   ["פלסטיק", BagIcon],
   ["בטיחות", ShieldIcon],
   ["אריז", PackageIcon],
+  ["סולל", BatteryIcon],
 ];
 
 export function getCategoryIcon(name: string): IconComponent {

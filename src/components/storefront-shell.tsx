@@ -54,6 +54,20 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [allProducts, setAllProducts] = useState<Product[] | null>(null);
   const contactFooterRef = useRef<HTMLElement | null>(null);
+  const headerRef = useRef<HTMLElement | null>(null);
+
+  // Expose the sticky header's height as --shop-header-h so other sticky
+  // elements (e.g. the category section nav) can pin directly below it.
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    const update = () =>
+      document.documentElement.style.setProperty("--shop-header-h", `${header.offsetHeight}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
 
   const [cartHydrated, setCartHydrated] = useState(false);
   const [resumePromptOpen, setResumePromptOpen] = useState(false);
@@ -156,7 +170,7 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
   return (
     <CartContext.Provider value={contextValue}>
       <div className="min-h-screen bg-[#f7f5f1] pb-28">
-        <header className="sticky top-0 z-10 bg-white border-b border-[#eae5dc]">
+        <header ref={headerRef} className="sticky top-0 z-10 bg-white border-b border-[#eae5dc]">
           <div className="px-4 pt-4 pb-3">
             <div className="flex items-center justify-between gap-3 mb-3.5">
               <Link href="/">
