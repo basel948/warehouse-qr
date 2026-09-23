@@ -77,72 +77,74 @@ export function SaleCarousel({ products }: { products: Product[] }) {
   return (
     <div className="mb-8">
       <h2 className="text-lg font-bold text-[#1a1714] mb-3 px-4 sm:px-0">{t("catalog.saleTitle")}</h2>
-      <div
-        ref={scrollerRef}
-        className="flex gap-0 sm:gap-3 overflow-x-auto snap-x snap-mandatory pb-1 -mx-4 sm:mx-0"
-      >
-        {products.map((product) => {
-          const percentOff = getSalePercentOff(product);
-          return (
-            <button
-              key={product.id}
-              onClick={() => openProductDetail(product)}
-              className="relative shrink-0 w-full sm:w-[55%] lg:w-[38%] snap-start snap-always text-start bg-white sm:border sm:border-[#eae5dc] sm:rounded-[16px] overflow-hidden sm:shadow-[0_2px_8px_-4px_rgba(0,0,0,0.15)]"
-            >
-              {percentOff !== null && (
-                <span className="absolute top-2.5 start-2.5 z-10 bg-[#b3402e] text-white text-xs font-bold rounded-full px-2.5 py-1">
-                  -{percentOff}%
-                </span>
-              )}
-              <div className="aspect-[4/3] flex items-center justify-center bg-[#f2efe9] overflow-hidden">
-                {product.saleBannerImageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={withCloudinaryTransform(product.saleBannerImageUrl, "q_auto")}
-                    alt={product.name}
-                    className="w-full h-full object-cover"
-                  />
-                ) : product.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={withCloudinaryTransform(product.imageUrl, "q_auto")}
-                    alt={product.name}
-                    className="w-full h-full object-contain p-4"
-                  />
-                ) : (
-                  <PackageIcon className="w-10 h-10 text-[#c5bdb1]" />
-                )}
-              </div>
-              <div className="p-4 sm:p-3">
-                <p className="text-sm font-medium text-[#2b2620] line-clamp-1 mb-1">{product.name}</p>
-                <p className="text-base font-bold flex items-center gap-1.5">
-                  <span className="text-[#b3402e]">₪{product.salePrice!.toFixed(2)}</span>
-                  <span className="text-[#a39a8e] font-medium line-through text-sm">
-                    ₪{product.price.toFixed(2)}
+      <div className="relative">
+        <div
+          ref={scrollerRef}
+          className="flex gap-0 sm:gap-3 overflow-x-auto snap-x snap-mandatory pb-1 -mx-4 sm:mx-0"
+        >
+          {products.map((product) => {
+            const percentOff = getSalePercentOff(product);
+            return (
+              <button
+                key={product.id}
+                onClick={() => openProductDetail(product)}
+                className="relative shrink-0 w-full sm:w-[55%] lg:w-[38%] snap-start snap-always text-start bg-white sm:border sm:border-[#eae5dc] sm:rounded-[16px] overflow-hidden sm:shadow-[0_2px_8px_-4px_rgba(0,0,0,0.15)]"
+              >
+                {percentOff !== null && (
+                  <span className="absolute top-2.5 start-2.5 z-10 bg-[#b3402e] text-white text-xs font-bold rounded-full px-2.5 py-1">
+                    -{percentOff}%
                   </span>
-                </p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-      {products.length > 1 && (
-        <div className="flex justify-center gap-1.5 mt-3 sm:hidden">
-          {products.map((_, index) => (
-            <button
-              key={index}
-              aria-label={`${index + 1}`}
-              onClick={() => {
-                lastInteractionRef.current = Date.now();
-                scrollToIndex(index);
-              }}
-              className={`h-1.5 rounded-full transition-all ${
-                index === activeIndex ? "w-4 bg-[#1a1714]" : "w-1.5 bg-[#e0d9cf]"
-              }`}
-            />
-          ))}
+                )}
+                <div className="aspect-[4/3] flex items-center justify-center bg-[#f2efe9] overflow-hidden">
+                  {product.saleBannerImageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={withCloudinaryTransform(product.saleBannerImageUrl, "q_auto")}
+                      alt={product.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : product.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={withCloudinaryTransform(product.imageUrl, "q_auto")}
+                      alt={product.name}
+                      className="w-full h-full object-contain p-4"
+                    />
+                  ) : (
+                    <PackageIcon className="w-10 h-10 text-[#c5bdb1]" />
+                  )}
+                </div>
+                <div className="p-4 sm:p-3">
+                  <p className="text-sm font-medium text-[#2b2620] line-clamp-1 mb-1">{product.name}</p>
+                  <p className="text-base font-bold flex items-center gap-1.5">
+                    <span className="text-[#b3402e]">₪{product.salePrice!.toFixed(2)}</span>
+                    <span className="text-[#a39a8e] font-medium line-through text-sm">
+                      ₪{product.price.toFixed(2)}
+                    </span>
+                  </p>
+                </div>
+              </button>
+            );
+          })}
         </div>
-      )}
+        {products.length > 1 && (
+          <div className="absolute top-2.5 inset-x-0 z-20 flex justify-center gap-1.5 sm:hidden">
+            {products.map((_, index) => (
+              <button
+                key={index}
+                aria-label={`${index + 1}`}
+                onClick={() => {
+                  lastInteractionRef.current = Date.now();
+                  scrollToIndex(index);
+                }}
+                className={`w-2 h-2 rounded-full border border-white transition-colors ${
+                  index === activeIndex ? "bg-white" : "bg-transparent"
+                }`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
