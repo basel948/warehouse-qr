@@ -8,7 +8,7 @@ import { useCart } from "@/components/storefront-shell";
 import { type Product, ProductCard } from "@/components/catalog-ui";
 import { useProductFilters } from "@/lib/use-product-filters";
 import { getCategoryIcon } from "@/lib/category-icons";
-import { withCloudinaryTransform } from "@/lib/cloudinary-url";
+import { cloudinaryImage } from "@/lib/cloudinary-url";
 
 const OTHER_SECTION_ID = "other";
 
@@ -89,7 +89,7 @@ export function CategorySections({
                       {imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={withCloudinaryTransform(imageUrl, "q_auto")}
+                          src={cloudinaryImage(imageUrl, "SMALL")}
                           alt=""
                           className="w-full h-full object-contain p-2.5"
                         />

@@ -75,7 +75,8 @@ async function main() {
   function uploadOnce(buffer: Buffer): Promise<string> {
     return new Promise((resolve, reject) => {
       const stream = cloudinary.uploader.upload_stream(
-        { folder: "warehouse-products" },
+        // Same 1600px cap as the admin upload (src/lib/cloudinary.ts).
+        { folder: "warehouse-products", transformation: [{ width: 1600, height: 1600, crop: "limit" }] },
         (error, result) => {
           if (error || !result) {
             reject(error ?? new Error("Cloudinary upload returned no result"));

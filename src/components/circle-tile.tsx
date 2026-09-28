@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { getCategoryIcon } from "@/lib/category-icons";
-import { withCloudinaryTransform } from "@/lib/cloudinary-url";
+import { cloudinaryImage } from "@/lib/cloudinary-url";
 
 export function CircleTile({
   href,
@@ -18,7 +18,7 @@ export function CircleTile({
         {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={withCloudinaryTransform(imageUrl, "q_auto")}
+            src={cloudinaryImage(imageUrl, "TILE")}
             alt=""
             className="w-full h-full object-contain p-5"
           />
