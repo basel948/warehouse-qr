@@ -19,7 +19,7 @@ at `/admin` (login with the `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD` you se
 
 | Variable | Purpose |
 | --- | --- |
-| `DATABASE_URL` | SQLite file path for Prisma. |
+| `DATABASE_URL` | Postgres connection string for Prisma. |
 | `NEXTAUTH_SECRET` | Secret for signing admin session JWTs. Generate with `openssl rand -base64 32`. |
 | `NEXTAUTH_URL` | Base URL of the app (used by NextAuth). |
 | `SEED_ADMIN_USERNAME` / `SEED_ADMIN_PASSWORD` | Credentials created by `prisma/seed.ts` for the warehouse owner's admin login. |

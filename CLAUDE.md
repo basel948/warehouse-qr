@@ -18,14 +18,17 @@ owner authenticates into `/admin` to manage products and view/update order statu
 - `npx prisma migrate dev --name <name>` — create and apply a migration after editing `prisma/schema.prisma`.
 - `npx prisma generate` — regenerate the Prisma client (runs automatically after `migrate dev`).
 - `npm run db:seed` — seed the admin user (from `SEED_ADMIN_USERNAME`/`SEED_ADMIN_PASSWORD` in `.env`), categories, and sample products; fully idempotent (upserts everything by stable id/name), safe to re-run at any time.
-- `npm run db:studio` — open Prisma Studio to inspect/edit the SQLite database directly.
+- `npm run db:studio` — open Prisma Studio to inspect/edit the database directly.
 
 There is no test suite configured yet.
 
 ## Architecture
 
-**Database**: SQLite via Prisma (`prisma/schema.prisma`). Models: `Admin`, `Category`, `Product`,
-`Order`, `OrderItem`, `Coupon`. SQLite has no enum support, so `Order.status` is a plain `String`
+**Database**: Postgres via Prisma (`prisma/schema.prisma`), a Railway Postgres service in
+production. It was SQLite on a Railway volume until 2026-09; the old SQLite migrations were replaced
+by a single Postgres baseline migration, and `scripts/copy-to-postgres/` holds the one-time data
+copy used for the switch. Models: `Admin`, `Category`, `Product`,
+`Order`, `OrderItem`, `Coupon`. `Order.status` is a plain `String` (a holdover from SQLite, which has no enums)
 constrained at the application layer by `src/lib/order-status.ts` (`ORDER_STATUS.PENDING` /
 `CONFIRMED` / `CANCELLED`) rather than a Prisma enum — use that constant instead of hardcoding
 status strings. `src/lib/prisma.ts` exports a singleton client (guards against exhausting

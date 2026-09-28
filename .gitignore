@@ -44,3 +44,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local copies of the live database (contain customer data)
+/backups
