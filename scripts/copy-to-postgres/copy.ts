@@ -12,7 +12,7 @@
 // history and Cloudinary image URLs all keep working. Refuses to run if the
 // target already has any data, so it can't double-insert or overwrite.
 
-import { PrismaClient as PostgresClient } from "@prisma/client";
+import { Prisma, PrismaClient as PostgresClient } from "@prisma/client";
 // Generated from sqlite-source.prisma (same models, SQLite datasource).
 import { PrismaClient as SqliteClient } from "../../node_modules/.prisma/sqlite-source-client";
 
@@ -56,16 +56,24 @@ async function main() {
       await tx.admin.createMany({ data: admins });
       await tx.category.createMany({ data: categories });
       await tx.subcategory.createMany({ data: subcategories });
-      for (const { categories: productCategories, ...product } of products) {
-        await tx.product.create({
-          data: { ...product, categories: { connect: productCategories } },
-        });
+      await tx.product.createMany({
+        data: products.map(({ categories: _categories, ...product }) => product),
+      });
+      // Product<->Category is an implicit many-to-many, stored in Prisma's
+      // "_CategoryToProduct" join table (A = Category.id, B = Product.id).
+      // Inserted in one statement - one create()+connect per product is a
+      // round trip each, which is far too slow over a remote connection.
+      const links = products.flatMap((product) =>
+        product.categories.map((category) => Prisma.sql`(${category.id}, ${product.id})`)
+      );
+      if (links.length > 0) {
+        await tx.$executeRaw`INSERT INTO "_CategoryToProduct" ("A", "B") VALUES ${Prisma.join(links)}`;
       }
       await tx.coupon.createMany({ data: coupons });
       await tx.order.createMany({ data: orders });
       await tx.orderItem.createMany({ data: orderItems });
     },
-    { timeout: 120_000 }
+    { timeout: 600_000, maxWait: 60_000 }
   );
 
   const sourceCounts = await counts(source);
