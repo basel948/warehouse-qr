@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ImageUploadField } from "@/components/image-upload-field";
 import { DuplicateIcon, EditIcon, PackageIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
+import { Spinner, useToast } from "@/components/toast";
 import { optimizedImage } from "@/lib/image-url";
 
 type Category = {
@@ -102,8 +103,16 @@ function CategoryMultiSelect({
   );
 }
 
+type ProductAction = "stock" | "sale" | "duplicate" | "delete" | "save";
+
 export default function AdminProductsPage() {
   const { t } = useLocale();
+  const toast = useToast();
+  // Which product action is in flight, so its button can show a spinner and
+  // the row's other buttons can't be double-clicked meanwhile.
+  const [busy, setBusy] = useState<{ id: string; action: ProductAction } | null>(null);
+  // Product whose trash button was clicked once and is waiting for "delete" / "cancel".
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
@@ -138,8 +147,10 @@ export default function AdminProductsPage() {
   const [editSaleBannerImageUrl, setEditSaleBannerImageUrl] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
 
-  async function loadAll() {
-    setLoading(true);
+  // `quiet` refreshes in the background after an action instead of swapping
+  // the whole list for the "loading..." text.
+  async function loadAll({ quiet = false }: { quiet?: boolean } = {}) {
+    if (!quiet) setLoading(true);
     const [productsRes, categoriesRes, subcategoriesRes] = await Promise.all([
       fetch("/api/products"),
       fetch("/api/categories"),
@@ -264,10 +275,12 @@ export default function AdminProductsPage() {
     setImageUrl("");
     setCategoryIds([]);
     setSubcategoryId("");
-    loadAll();
+    toast(t("admin.products.toastAdded"));
+    loadAll({ quiet: true });
   }
 
   async function duplicateProduct(product: Product) {
+    setBusy({ id: product.id, action: "duplicate" });
     const res = await fetch("/api/products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -282,9 +295,15 @@ export default function AdminProductsPage() {
       }),
     });
 
-    if (!res.ok) return;
+    if (!res.ok) {
+      setBusy(null);
+      toast(t("admin.products.toastFailed"), "error");
+      return;
+    }
     const newProduct: Product = await res.json();
-    await loadAll();
+    await loadAll({ quiet: true });
+    setBusy(null);
+    toast(t("admin.products.toastDuplicated"));
     startEdit(newProduct);
   }
 
@@ -340,6 +359,7 @@ export default function AdminProductsPage() {
       }
     }
 
+    setBusy({ id: productId, action: "save" });
     const res = await fetch(`/api/products/${productId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -355,12 +375,15 @@ export default function AdminProductsPage() {
     });
 
     if (!res.ok) {
+      setBusy(null);
       setEditError(t("admin.products.editProductFailed"));
       return;
     }
 
+    await loadAll({ quiet: true });
+    setBusy(null);
     setEditingId(null);
-    loadAll();
+    toast(t("admin.products.toastSaved"));
   }
 
   async function setProductCategories(product: Product, newCategoryIds: string[]) {
@@ -390,31 +413,74 @@ export default function AdminProductsPage() {
     loadAll();
   }
 
-  async function toggleStock(product: Product) {
-    await fetch(`/api/products/${product.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ inStock: !product.inStock }),
-    });
-    loadAll();
+  // Runs a one-click product action with a spinner on its button, then a
+  // success or failure toast once the list has refreshed.
+  async function runAction(
+    product: Product,
+    action: ProductAction,
+    request: () => Promise<Response>,
+    successMessage: string,
+    failureMessage: (res: Response) => string = () => t("admin.products.toastFailed")
+  ) {
+    setBusy({ id: product.id, action });
+    let res: Response | null = null;
+    try {
+      res = await request();
+    } catch {
+      res = null;
+    }
+    if (res?.ok) await loadAll({ quiet: true });
+    setBusy(null);
+    if (res?.ok) toast(successMessage);
+    else toast(res ? failureMessage(res) : t("admin.products.toastFailed"), "error");
+  }
+
+  function toggleStock(product: Product) {
+    runAction(
+      product,
+      "stock",
+      () =>
+        fetch(`/api/products/${product.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inStock: !product.inStock }),
+        }),
+      product.inStock ? t("admin.products.toastOutOfStock") : t("admin.products.toastInStock")
+    );
   }
 
   function toggleSale(product: Product) {
     if (product.onSale) {
-      fetch(`/api/products/${product.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ onSale: false, salePrice: null, saleBannerImageUrl: null }),
-      }).then(loadAll);
+      runAction(
+        product,
+        "sale",
+        () =>
+          fetch(`/api/products/${product.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ onSale: false, salePrice: null, saleBannerImageUrl: null }),
+          }),
+        t("admin.products.toastRemovedFromSale")
+      );
       return;
     }
     startEdit(product);
     setEditOnSale(true);
   }
 
-  async function deleteProduct(id: string) {
-    await fetch(`/api/products/${id}`, { method: "DELETE" });
-    loadAll();
+  function deleteProduct(product: Product) {
+    setConfirmDeleteId(null);
+    runAction(
+      product,
+      "delete",
+      () => fetch(`/api/products/${product.id}`, { method: "DELETE" }),
+      t("admin.products.toastDeleted"),
+      (res) => (res.status === 409 ? t("admin.products.toastDeleteHasOrders") : t("admin.products.toastFailed"))
+    );
+  }
+
+  function actionIcon(product: Product, action: ProductAction, icon: React.ReactNode) {
+    return busy?.id === product.id && busy.action === action ? <Spinner /> : icon;
   }
 
   const filteredProducts = products.filter((product) =>
@@ -776,8 +842,10 @@ export default function AdminProductsPage() {
                       <div className="flex gap-3">
                         <button
                           type="submit"
-                          className="bg-[#1a1714] text-white text-sm font-semibold rounded-[9px] px-3.5 py-2"
+                          disabled={busy?.id === product.id}
+                          className="inline-flex items-center gap-2 bg-[#1a1714] text-white text-sm font-semibold rounded-[9px] px-3.5 py-2 disabled:opacity-70"
                         >
+                          {busy?.id === product.id && busy.action === "save" && <Spinner />}
                           {t("admin.products.save")}
                         </button>
                         <button
@@ -863,6 +931,7 @@ export default function AdminProductsPage() {
                       </span>
                       <button
                         onClick={() => toggleStock(product)}
+                        disabled={busy?.id === product.id}
                         title={
                           product.inStock
                             ? t("admin.products.markOutOfStock")
@@ -873,14 +942,15 @@ export default function AdminProductsPage() {
                             ? t("admin.products.markOutOfStock")
                             : t("admin.products.markInStock")
                         }
-                        className={`w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e6e0d6] ${
+                        className={`w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] ${
                           product.inStock ? "text-[#2f6b3a]" : "text-[#8a8177]"
                         }`}
                       >
-                        <PackageIcon className="w-4 h-4" />
+                        {actionIcon(product, "stock", <PackageIcon className="w-4 h-4" />)}
                       </button>
                       <button
                         onClick={() => toggleSale(product)}
+                        disabled={busy?.id === product.id}
                         title={
                           product.onSale
                             ? t("admin.products.removeFromSale")
@@ -891,38 +961,58 @@ export default function AdminProductsPage() {
                             ? t("admin.products.removeFromSale")
                             : t("admin.products.markOnSale")
                         }
-                        className={`w-8 h-8 flex items-center justify-center rounded-[8px] border text-sm font-bold ${
+                        className={`w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border text-sm font-bold ${
                           product.onSale
                             ? "border-[var(--accent)] text-[var(--accent)]"
                             : "border-[#e6e0d6] text-[#8a8177]"
                         }`}
                       >
-                        %
+                        {actionIcon(product, "sale", "%")}
                       </button>
                       <button
                         onClick={() => startEdit(product)}
+                        disabled={busy?.id === product.id}
                         title={t("admin.products.edit")}
                         aria-label={t("admin.products.edit")}
-                        className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e6e0d6] text-[#6b6259]"
+                        className="w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] text-[#6b6259]"
                       >
                         <EditIcon className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => duplicateProduct(product)}
+                        disabled={busy?.id === product.id}
                         title={t("admin.products.duplicate")}
                         aria-label={t("admin.products.duplicate")}
-                        className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e6e0d6] text-[#6b6259]"
+                        className="w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] text-[#6b6259]"
                       >
-                        <DuplicateIcon className="w-4 h-4" />
+                        {actionIcon(product, "duplicate", <DuplicateIcon className="w-4 h-4" />)}
                       </button>
-                      <button
-                        onClick={() => deleteProduct(product.id)}
-                        title={t("admin.products.delete")}
-                        aria-label={t("admin.products.delete")}
-                        className="w-8 h-8 flex items-center justify-center rounded-[8px] border border-[#e6e0d6] text-[#b3402e]"
-                      >
-                        <TrashIcon className="w-4 h-4" />
-                      </button>
+                      {confirmDeleteId === product.id ? (
+                        <span className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => deleteProduct(product)}
+                            className="h-8 rounded-[8px] bg-[#b3402e] text-white text-xs font-semibold px-2.5"
+                          >
+                            {t("admin.products.confirmDelete")}
+                          </button>
+                          <button
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="h-8 rounded-[8px] border border-[#e6e0d6] text-[#6b6259] text-xs font-semibold px-2.5"
+                          >
+                            {t("admin.products.cancel")}
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => setConfirmDeleteId(product.id)}
+                          disabled={busy?.id === product.id}
+                          title={t("admin.products.delete")}
+                          aria-label={t("admin.products.delete")}
+                          className="w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] text-[#b3402e]"
+                        >
+                          {actionIcon(product, "delete", <TrashIcon className="w-4 h-4" />)}
+                        </button>
+                      )}
                     </div>
                   </li>
                 )

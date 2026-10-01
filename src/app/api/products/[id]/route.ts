@@ -63,6 +63,14 @@ export async function DELETE(_request: Request, { params }: { params: { id: stri
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // Order items reference their product, so a product that has ever been
+  // ordered can't be deleted without breaking past orders; tell the admin
+  // why instead of failing with a generic 500.
+  const orderItemCount = await prisma.orderItem.count({ where: { productId: params.id } });
+  if (orderItemCount > 0) {
+    return NextResponse.json({ error: "has_orders" }, { status: 409 });
+  }
+
   await prisma.product.delete({ where: { id: params.id } });
   return NextResponse.json({ ok: true });
 }
