@@ -1,3 +1,5 @@
+import { normalizeIsraeliPhone } from "@/lib/phone";
+
 const GRAPH_API_VERSION = "v20.0";
 
 type OrderPdfMessage = {
@@ -8,20 +10,6 @@ type OrderPdfMessage = {
   /** Hebrew word used as the attached filename's prefix, e.g. "הזמנה" or "קבלה". */
   filenameLabel?: string;
 };
-
-/**
- * Buyers type their phone in local Israeli format (leading 0), but the
- * WhatsApp Cloud API requires international format with no leading 0
- * (e.g. "972501234567"). Owner numbers in env vars are already stored in
- * that format, so this is a no-op for those.
- */
-function normalizeIsraeliPhone(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("0")) {
-    return `972${digits.slice(1)}`;
-  }
-  return digits;
-}
 
 /**
  * Sends the order as a WhatsApp document message (PDF + short caption) to

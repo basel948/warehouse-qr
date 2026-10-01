@@ -3,12 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
+import { ORDER_STATUS } from "@/lib/order-status";
 import { PAYMENT_METHOD } from "@/lib/payment-method";
+import { normalizeIsraeliPhone } from "@/lib/phone";
 
 type OrderItem = {
   id: string;
   quantity: number;
   price: number;
+  product: { name: string };
 };
 
 type Order = {
@@ -16,6 +19,7 @@ type Order = {
   businessName: string;
   customerName: string;
   customerPhone: string;
+  status: string;
   paymentMethod: string;
   settledAt: string | null;
   couponCode: string | null;
@@ -25,10 +29,13 @@ type Order = {
 };
 
 type MonthGroup = {
+  key: string;
   customerPhone: string;
   customerName: string;
   month: string; // "YYYY-MM"
   orders: Order[];
+  /** Orders that count toward the bill (everything except cancelled ones). */
+  activeCount: number;
   total: number;
   settled: boolean;
 };
@@ -70,19 +77,26 @@ export default function AdminPayLaterPage() {
     for (const order of orders) {
       if (order.paymentMethod !== PAYMENT_METHOD.PAY_LATER) continue;
       const month = order.createdAt.slice(0, 7); // "YYYY-MM"
-      const key = `${order.customerPhone}__${month}`;
+      // Group by the normalized phone so "050-1234567" and "0501234567"
+      // land on the same customer's card.
+      const key = `${normalizeIsraeliPhone(order.customerPhone)}__${month}`;
       if (!byKey.has(key)) {
         byKey.set(key, {
+          key,
           customerPhone: order.customerPhone,
           customerName: order.customerName,
           month,
           orders: [],
+          activeCount: 0,
           total: 0,
           settled: true,
         });
       }
       const group = byKey.get(key)!;
       group.orders.push(order);
+      // Cancelled orders stay visible (crossed out) but aren't owed.
+      if (order.status === ORDER_STATUS.CANCELLED) continue;
+      group.activeCount++;
       group.total += orderTotal(order);
       if (!order.settledAt) group.settled = false;
     }
@@ -99,8 +113,7 @@ export default function AdminPayLaterPage() {
   });
 
   async function toggleSettled(group: MonthGroup) {
-    const key = `${group.customerPhone}__${group.month}`;
-    setSettlingKey(key);
+    setSettlingKey(group.key);
     await fetch("/api/orders/pay-later/settle", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -158,8 +171,8 @@ export default function AdminPayLaterPage() {
 
       <ul className="space-y-3.5">
         {visibleGroups.map((group) => {
-          const key = `${group.customerPhone}__${group.month}`;
-          const orderCount = group.orders.length;
+          const key = group.key;
+          const orderCount = group.activeCount;
           return (
             <li key={key} className="bg-white border border-[#eae5dc] rounded-[14px] p-[18px]">
               <div className="flex items-start justify-between gap-4 mb-3.5">
@@ -185,16 +198,34 @@ export default function AdminPayLaterPage() {
                 </span>
               </div>
 
-              <div className="bg-[#faf8f5] rounded-[10px] px-3.5 py-3 flex flex-col gap-1.5 text-[13px] text-[#4a443c]">
-                {group.orders.map((order) => (
-                  <div key={order.id} className="flex items-center justify-between">
-                    <span>
-                      {new Date(order.createdAt).toLocaleDateString(locale === "ar" ? "ar" : "he-IL")}
-                      {order.couponCode ? ` · ${order.couponCode}` : ""}
-                    </span>
-                    <span className="font-semibold">₪{orderTotal(order).toFixed(2)}</span>
-                  </div>
-                ))}
+              <div className="bg-[#faf8f5] rounded-[10px] px-3.5 py-3 flex flex-col divide-y divide-[#e6e0d6] text-[13px] text-[#4a443c]">
+                {group.orders.map((order) => {
+                  const cancelled = order.status === ORDER_STATUS.CANCELLED;
+                  return (
+                    <div key={order.id} className={`py-2.5 first:pt-0 last:pb-0 ${cancelled ? "text-[#a39a8e]" : ""}`}>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold">
+                          {new Date(order.createdAt).toLocaleDateString(locale === "ar" ? "ar" : "he-IL")}
+                          {order.couponCode ? ` · ${order.couponCode} (-${order.discountPercent}%)` : ""}
+                          {cancelled ? ` · ${t("admin.payLater.cancelled")}` : ""}
+                        </span>
+                        <span className={`font-semibold ${cancelled ? "line-through" : ""}`}>
+                          ₪{orderTotal(order).toFixed(2)}
+                        </span>
+                      </div>
+                      <ul className={`mt-1 ps-3 border-s-2 border-[#eae5dc] flex flex-col gap-0.5 text-xs ${cancelled ? "" : "text-[#6b6259]"}`}>
+                        {order.items.map((item) => (
+                          <li key={item.id} className="flex items-start justify-between gap-3">
+                            <span className="min-w-0">
+                              {item.quantity} × {item.product.name}
+                            </span>
+                            <span className="shrink-0 tabular-nums">₪{(item.price * item.quantity).toFixed(2)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
               </div>
 
               <div className="flex items-center justify-between mt-3.5">
