@@ -28,19 +28,16 @@ type Order = {
   items: OrderItem[];
 };
 
-type MonthGroup = {
+type CustomerGroup = {
   key: string;
   customerPhone: string;
   customerName: string;
-  month: string; // "YYYY-MM"
+  /** Newest first (the API returns orders by createdAt desc). */
   orders: Order[];
-  /** Orders that count toward the bill (everything except cancelled ones). */
-  activeCount: number;
-  total: number;
-  settled: boolean;
 };
 
 const FILTERS = ["OUTSTANDING", "SETTLED", "ALL"] as const;
+type Filter = (typeof FILTERS)[number];
 
 function orderTotal(order: Order): number {
   const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -48,14 +45,26 @@ function orderTotal(order: Order): number {
   return subtotal - discountAmount;
 }
 
+function isCancelled(order: Order): boolean {
+  return order.status === ORDER_STATUS.CANCELLED;
+}
+
+// Which of a customer's orders a tab shows. Cancelled orders aren't owed, so
+// they only appear (crossed out) under "All".
+function ordersForFilter(orders: Order[], filter: Filter): Order[] {
+  if (filter === "OUTSTANDING") return orders.filter((o) => !o.settledAt && !isCancelled(o));
+  if (filter === "SETTLED") return orders.filter((o) => o.settledAt && !isCancelled(o));
+  return orders;
+}
+
 export default function AdminPayLaterPage() {
   const { t, locale } = useLocale();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<(typeof FILTERS)[number]>("OUTSTANDING");
+  const [filter, setFilter] = useState<Filter>("OUTSTANDING");
   const [settlingKey, setSettlingKey] = useState<string | null>(null);
 
-  const filterLabels: Record<(typeof FILTERS)[number], string> = {
+  const filterLabels: Record<Filter, string> = {
     ALL: t("admin.payLater.filterAll"),
     OUTSTANDING: t("admin.payLater.filterOutstanding"),
     SETTLED: t("admin.payLater.filterSettled"),
@@ -72,69 +81,42 @@ export default function AdminPayLaterPage() {
     loadOrders();
   }, []);
 
-  const groups: MonthGroup[] = useMemo(() => {
-    const byKey = new Map<string, MonthGroup>();
+  // One card per customer, across all months. Grouped by the normalized
+  // phone so "050-1234567" and "0501234567" land on the same card.
+  const groups: CustomerGroup[] = useMemo(() => {
+    const byKey = new Map<string, CustomerGroup>();
     for (const order of orders) {
       if (order.paymentMethod !== PAYMENT_METHOD.PAY_LATER) continue;
-      const month = order.createdAt.slice(0, 7); // "YYYY-MM"
-      // Group by the normalized phone so "050-1234567" and "0501234567"
-      // land on the same customer's card.
-      const key = `${normalizeIsraeliPhone(order.customerPhone)}__${month}`;
+      const key = normalizeIsraeliPhone(order.customerPhone);
       if (!byKey.has(key)) {
         byKey.set(key, {
           key,
           customerPhone: order.customerPhone,
           customerName: order.customerName,
-          month,
           orders: [],
-          activeCount: 0,
-          total: 0,
-          settled: true,
         });
       }
-      const group = byKey.get(key)!;
-      group.orders.push(order);
-      // Cancelled orders stay visible (crossed out) but aren't owed.
-      if (order.status === ORDER_STATUS.CANCELLED) continue;
-      group.activeCount++;
-      group.total += orderTotal(order);
-      if (!order.settledAt) group.settled = false;
+      byKey.get(key)!.orders.push(order);
     }
-    return Array.from(byKey.values()).sort((a, b) => {
-      if (a.month !== b.month) return b.month.localeCompare(a.month);
-      return a.customerPhone.localeCompare(b.customerPhone);
-    });
+    return Array.from(byKey.values());
   }, [orders]);
 
-  const visibleGroups = groups.filter((group) => {
-    if (filter === "ALL") return true;
-    if (filter === "SETTLED") return group.settled;
-    return !group.settled;
-  });
+  const visibleGroups = groups
+    .map((group) => ({ group, shown: ordersForFilter(group.orders, filter) }))
+    .filter(({ shown }) => shown.length > 0);
 
-  async function toggleSettled(group: MonthGroup) {
-    setSettlingKey(group.key);
+  async function setSettled(key: string, orderIds: string[], settled: boolean) {
+    setSettlingKey(key);
     await fetch("/api/orders/pay-later/settle", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customerPhone: group.customerPhone,
-        month: group.month,
-        settled: !group.settled,
-      }),
+      body: JSON.stringify({ orderIds, settled }),
     });
     await loadOrders();
     setSettlingKey(null);
   }
 
-  function formatMonth(month: string): string {
-    const [year, monthNum] = month.split("-").map(Number);
-    const date = new Date(year, monthNum - 1, 1);
-    return date.toLocaleDateString(locale === "ar" ? "ar" : "he-IL", {
-      year: "numeric",
-      month: "long",
-    });
-  }
+  const dateLocale = locale === "ar" ? "ar" : "he-IL";
 
   if (loading) {
     return (
@@ -170,16 +152,22 @@ export default function AdminPayLaterPage() {
       )}
 
       <ul className="space-y-3.5">
-        {visibleGroups.map((group) => {
+        {visibleGroups.map(({ group, shown }) => {
+          const active = shown.filter((o) => !isCancelled(o));
+          const unpaid = active.filter((o) => !o.settledAt);
+          const owesMoney = unpaid.length > 0;
+          // While anything is unpaid, the total and the button are about what's
+          // still owed; once everything shown is paid, they're about what was paid.
+          const counted = owesMoney ? unpaid : active;
+          const total = counted.reduce((sum, o) => sum + orderTotal(o), 0);
+          const orderCount = active.length;
           const key = group.key;
-          const orderCount = group.activeCount;
           return (
             <li key={key} className="bg-white border border-[#eae5dc] rounded-[14px] p-[18px]">
               <div className="flex items-start justify-between gap-4 mb-3.5">
                 <div>
                   <p className="font-semibold text-[15px] text-[#1a1714]">{group.customerPhone}</p>
                   <p className="text-[13px] text-[#6b6259]">{group.customerName}</p>
-                  <p className="text-[13px] text-[#6b6259]">{formatMonth(group.month)}</p>
                   <p className="text-xs text-[#a39a8e] mt-0.5">
                     {orderCount === 1
                       ? t("admin.payLater.ordersCountOne")
@@ -188,29 +176,37 @@ export default function AdminPayLaterPage() {
                 </div>
                 <span
                   className={`inline-flex items-center gap-1 shrink-0 rounded-[9px] px-2.5 py-1.5 text-[13px] font-semibold ${
-                    group.settled
-                      ? "bg-[#f1f7f1] border border-[#cfe3cf] text-[#2f6b3a]"
-                      : "bg-[#fdf6e8] border border-[#f0dfba] text-[#8a5a06]"
+                    owesMoney
+                      ? "bg-[#fdf6e8] border border-[#f0dfba] text-[#8a5a06]"
+                      : "bg-[#f1f7f1] border border-[#cfe3cf] text-[#2f6b3a]"
                   }`}
                 >
-                  {group.settled && <CheckIcon className="w-3.5 h-3.5" />}
-                  {group.settled ? t("admin.payLater.statusSettled") : t("admin.payLater.statusOutstanding")}
+                  {!owesMoney && <CheckIcon className="w-3.5 h-3.5" />}
+                  {owesMoney ? t("admin.payLater.statusOutstanding") : t("admin.payLater.statusSettled")}
                 </span>
               </div>
 
               <div className="bg-[#faf8f5] rounded-[10px] px-3.5 py-3 flex flex-col divide-y divide-[#e6e0d6] text-[13px] text-[#4a443c]">
-                {group.orders.map((order) => {
-                  const cancelled = order.status === ORDER_STATUS.CANCELLED;
+                {shown.map((order) => {
+                  const cancelled = isCancelled(order);
                   return (
                     <div key={order.id} className={`py-2.5 first:pt-0 last:pb-0 ${cancelled ? "text-[#a39a8e]" : ""}`}>
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-3">
                         <span className="font-semibold">
-                          {new Date(order.createdAt).toLocaleDateString(locale === "ar" ? "ar" : "he-IL")}
+                          {new Date(order.createdAt).toLocaleDateString(dateLocale)}
                           {order.couponCode ? ` · ${order.couponCode} (-${order.discountPercent}%)` : ""}
                           {cancelled ? ` · ${t("admin.payLater.cancelled")}` : ""}
                         </span>
-                        <span className={`font-semibold ${cancelled ? "line-through" : ""}`}>
-                          ₪{orderTotal(order).toFixed(2)}
+                        <span className="flex items-center gap-2 shrink-0">
+                          {filter === "ALL" && order.settledAt && !cancelled && (
+                            <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-[#2f6b3a]">
+                              <CheckIcon className="w-3 h-3" />
+                              {t("admin.payLater.statusSettled")}
+                            </span>
+                          )}
+                          <span className={`font-semibold ${cancelled ? "line-through" : ""}`}>
+                            ₪{orderTotal(order).toFixed(2)}
+                          </span>
                         </span>
                       </div>
                       <ul className={`mt-1 ps-3 border-s-2 border-[#eae5dc] flex flex-col gap-0.5 text-xs ${cancelled ? "" : "text-[#6b6259]"}`}>
@@ -229,19 +225,23 @@ export default function AdminPayLaterPage() {
               </div>
 
               <div className="flex items-center justify-between mt-3.5">
-                <button
-                  onClick={() => toggleSettled(group)}
-                  disabled={settlingKey === key}
-                  className={`text-[13px] font-semibold rounded-[9px] px-3.5 py-2 border disabled:opacity-50 ${
-                    group.settled
-                      ? "border-[#e6e0d6] text-[#6b6259] bg-white"
-                      : "border-[var(--accent)] text-white bg-[var(--accent)]"
-                  }`}
-                >
-                  {group.settled ? t("admin.payLater.markUnsettled") : t("admin.payLater.markSettled")}
-                </button>
+                {counted.length > 0 ? (
+                  <button
+                    onClick={() => setSettled(key, counted.map((o) => o.id), owesMoney)}
+                    disabled={settlingKey === key}
+                    className={`text-[13px] font-semibold rounded-[9px] px-3.5 py-2 border disabled:opacity-50 ${
+                      owesMoney
+                        ? "border-[var(--accent)] text-white bg-[var(--accent)]"
+                        : "border-[#e6e0d6] text-[#6b6259] bg-white"
+                    }`}
+                  >
+                    {owesMoney ? t("admin.payLater.markSettled") : t("admin.payLater.markUnsettled")}
+                  </button>
+                ) : (
+                  <span />
+                )}
                 <span className="text-base font-bold text-[#1a1714]">
-                  {t("admin.payLater.totalDue")}: ₪{group.total.toFixed(2)}
+                  {owesMoney ? t("admin.payLater.totalDue") : t("admin.payLater.totalPaid")}: ₪{total.toFixed(2)}
                 </span>
               </div>
             </li>
