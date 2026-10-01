@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { PackageIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
-import { cloudinaryImage } from "@/lib/cloudinary-url";
+import { optimizedImage } from "@/lib/image-url";
 import { getSalePercentOff } from "@/lib/effective-price";
 
 export type Category = {
@@ -205,7 +205,7 @@ export function ProductCard({
         {product.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={cloudinaryImage(product.imageUrl, "CARD")}
+            src={optimizedImage(product.imageUrl, "CARD")}
             alt={product.name}
             className="w-full h-full object-contain"
           />
@@ -281,7 +281,7 @@ export function ProductDetailModal({
             {product.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={cloudinaryImage(product.imageUrl, "DETAIL")}
+                src={optimizedImage(product.imageUrl, "DETAIL")}
                 alt={product.name}
                 className="w-full h-full object-contain"
               />

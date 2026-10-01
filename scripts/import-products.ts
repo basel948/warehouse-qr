@@ -4,13 +4,13 @@
  * The Excel file must have a header row with these columns (any order):
  *   filename, suggested_name (or name), category, description, price
  * "filename" is looked up in the given images folder and uploaded to
- * Cloudinary; a cell with multiple comma-separated filenames uses the first.
+ * ImageKit; a cell with multiple comma-separated filenames uses the first.
  *
  * Usage:
  *   npx tsx scripts/import-products.ts <excel-file> <images-folder> [options]
  *
  * Options:
- *   --dry-run     Don't upload to Cloudinary or write to the database; just
+ *   --dry-run     Don't upload to ImageKit or write to the database; just
  *                 report what would happen.
  *   --limit=N     Only process the first N data rows (for testing).
  *
@@ -21,7 +21,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as XLSX from "xlsx";
 import { PrismaClient } from "@prisma/client";
-import { v2 as cloudinary } from "cloudinary";
+import { uploadImageBuffer } from "../src/lib/imagekit";
 
 function loadEnv(file = path.join(process.cwd(), ".env")) {
   if (!fs.existsSync(file)) return;
@@ -63,42 +63,6 @@ async function main() {
   if (!excelPath || !imagesDir) {
     console.error("Usage: npx tsx scripts/import-products.ts <excel-file> <images-folder> [--dry-run] [--limit=N]");
     process.exit(1);
-  }
-
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-    secure: true,
-  });
-
-  function uploadOnce(buffer: Buffer): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        // Same 1600px cap as the admin upload (src/lib/cloudinary.ts).
-        { folder: "warehouse-products", transformation: [{ width: 1600, height: 1600, crop: "limit" }] },
-        (error, result) => {
-          if (error || !result) {
-            reject(error ?? new Error("Cloudinary upload returned no result"));
-            return;
-          }
-          resolve(result.secure_url);
-        }
-      );
-      stream.end(buffer);
-    });
-  }
-
-  async function uploadImage(buffer: Buffer, attempts = 3): Promise<string> {
-    for (let attempt = 1; attempt <= attempts; attempt++) {
-      try {
-        return await uploadOnce(buffer);
-      } catch (err) {
-        if (attempt === attempts) throw err;
-        await new Promise((r) => setTimeout(r, 1500 * attempt));
-      }
-    }
-    throw new Error("unreachable");
   }
 
   const prisma = new PrismaClient();
@@ -184,7 +148,7 @@ async function main() {
 
     try {
       const buffer = fs.readFileSync(imagePath);
-      const imageUrl = await uploadImage(buffer);
+      const imageUrl = await uploadImageBuffer(buffer, primaryFilename);
 
       await prisma.product.create({
         data: {

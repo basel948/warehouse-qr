@@ -5,7 +5,7 @@ import { PackageIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 import { useCart } from "@/components/storefront-shell";
 import { type Product } from "@/components/catalog-ui";
-import { cloudinaryImage } from "@/lib/cloudinary-url";
+import { optimizedImage } from "@/lib/image-url";
 import { getSalePercentOff } from "@/lib/effective-price";
 
 const AUTOPLAY_INTERVAL_MS = 4000;
@@ -99,14 +99,14 @@ export function SaleCarousel({ products }: { products: Product[] }) {
                   {product.saleBannerImageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={cloudinaryImage(product.saleBannerImageUrl, "BANNER")}
+                      src={optimizedImage(product.saleBannerImageUrl, "BANNER")}
                       alt={product.name}
                       className="w-full h-full object-cover"
                     />
                   ) : product.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
-                      src={cloudinaryImage(product.imageUrl, "CARD")}
+                      src={optimizedImage(product.imageUrl, "CARD")}
                       alt={product.name}
                       className="w-full h-full object-contain p-4"
                     />

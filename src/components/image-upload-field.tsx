@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { PackageIcon } from "@/components/icons";
-import { cloudinaryImage } from "@/lib/cloudinary-url";
+import { optimizedImage } from "@/lib/image-url";
 
 type ErrorMessages = {
   notImage: string;
@@ -92,7 +92,7 @@ export function ImageUploadField({
       {value ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={cloudinaryImage(value, "THUMB")}
+          src={optimizedImage(value, "THUMB")}
           alt=""
           className="w-14 h-14 object-cover rounded-[10px] border border-[#eae5dc] shrink-0"
         />

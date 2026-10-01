@@ -2,7 +2,7 @@ import { File } from "node:buffer";
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { uploadProductImage } from "@/lib/cloudinary";
+import { uploadProductImage } from "@/lib/imagekit";
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     const url = await uploadProductImage(file);
     return NextResponse.json({ url });
   } catch (err) {
-    console.error("Cloudinary upload failed:", err);
+    console.error("ImageKit upload failed:", err);
     return NextResponse.json({ error: "upload_failed" }, { status: 502 });
   }
 }

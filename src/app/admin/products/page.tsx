@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ImageUploadField } from "@/components/image-upload-field";
 import { DuplicateIcon, EditIcon, PackageIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
-import { cloudinaryImage } from "@/lib/cloudinary-url";
+import { optimizedImage } from "@/lib/image-url";
 
 type Category = {
   id: string;
@@ -800,7 +800,7 @@ export default function AdminProductsPage() {
                       {product.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
-                          src={cloudinaryImage(product.imageUrl, "THUMB")}
+                          src={optimizedImage(product.imageUrl, "THUMB")}
                           alt=""
                           className="w-[38px] h-[38px] object-cover rounded-[9px] border border-[#eae5dc] shrink-0"
                         />

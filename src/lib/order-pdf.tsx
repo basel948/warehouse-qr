@@ -1,7 +1,7 @@
 import path from "node:path";
 import { Document, Font, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { WAREHOUSE_LOGO_URL, WAREHOUSE_NAME } from "@/lib/branding";
-import { withCloudinaryTransform } from "@/lib/cloudinary-url";
+import { withImageTransform } from "@/lib/image-url";
 import { PAYMENT_METHOD_LABEL_HE, type PaymentMethod } from "@/lib/payment-method";
 
 Font.register({
@@ -134,7 +134,7 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
           </View>
           {WAREHOUSE_LOGO_URL ? (
             <Image
-              src={withCloudinaryTransform(WAREHOUSE_LOGO_URL, "w_400,q_auto")}
+              src={withImageTransform(WAREHOUSE_LOGO_URL, "w-400,f-png")}
               style={styles.warehouseLogo}
             />
           ) : (
@@ -174,7 +174,7 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
               <View style={[styles.tableCell, styles.colProduct, styles.productCell]}>
                 {item.imageUrl && (
                   <Image
-                    src={withCloudinaryTransform(item.imageUrl, "w_100,h_100,c_fill,q_auto")}
+                    src={withImageTransform(item.imageUrl, "w-100,h-100,f-png")}
                     style={styles.productThumb}
                   />
                 )}

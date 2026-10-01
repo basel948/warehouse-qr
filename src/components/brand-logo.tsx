@@ -1,4 +1,5 @@
 import { WAREHOUSE_LOGO_URL, WAREHOUSE_NAME } from "@/lib/branding";
+import { optimizedImage } from "@/lib/image-url";
 
 export function BrandLogo({ size = "md" }: { size?: "sm" | "md" }) {
   // A configured logo image is assumed to already contain the full wordmark
@@ -8,7 +9,7 @@ export function BrandLogo({ size = "md" }: { size?: "sm" | "md" }) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={WAREHOUSE_LOGO_URL}
+        src={optimizedImage(WAREHOUSE_LOGO_URL, "LOGO")}
         alt={WAREHOUSE_NAME}
         className={`${size === "sm" ? "h-8" : "h-10"} w-auto object-contain shrink-0`}
       />
