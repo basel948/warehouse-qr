@@ -7,7 +7,9 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: WAREHOUSE_NAME,
     short_name: WAREHOUSE_NAME,
+    id: "/",
     start_url: "/",
+    scope: "/",
     display: "standalone",
     background_color: "#FFFFFF",
     theme_color: "#FFFFFF",
