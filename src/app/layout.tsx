@@ -16,6 +16,8 @@ const ibmPlexSansArabic = IBM_Plex_Sans_Arabic({
 export const metadata: Metadata = {
   title: WAREHOUSE_NAME,
   description: "Scan the QR code to order products from the warehouse.",
+  // admin/layout.tsx overrides this with the admin app's manifest.
+  manifest: "/manifest.webmanifest",
 };
 
 export default function RootLayout({
