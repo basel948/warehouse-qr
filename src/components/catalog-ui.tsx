@@ -186,17 +186,21 @@ export function ProductCard({
 }) {
   const { t } = useLocale();
   const percentOff = getSalePercentOff(product);
+  // Out-of-stock cards fade their image and text but keep the "out of stock"
+  // label at full strength, so it's the first thing a buyer reads.
+  const fade = !product.inStock ? "opacity-[.55]" : "";
   return (
-    <div
-      className={`border border-[#eae5dc] rounded-[14px] overflow-hidden flex flex-col bg-white ${
-        !product.inStock ? "opacity-[.55]" : ""
-      }`}
-    >
+    <div className="border border-[#eae5dc] rounded-[14px] overflow-hidden flex flex-col bg-white">
       <div
         className={`relative aspect-square flex items-center justify-center overflow-hidden p-2 ${
           product.imageUrl ? "bg-white" : "bg-[#f2efe9]"
         }`}
       >
+        {!product.inStock && (
+          <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 z-20 mx-auto w-fit bg-[#1a1714]/85 text-white text-xs font-bold rounded-full px-3 py-1">
+            {t("catalog.outOfStock")}
+          </span>
+        )}
         {percentOff !== null && (
           <span className="absolute top-1.5 start-1.5 z-10 bg-[#b3402e] text-white text-[10px] font-bold rounded-full px-1.5 py-0.5">
             -{percentOff}%
@@ -207,14 +211,14 @@ export function ProductCard({
           <img
             src={optimizedImage(product.imageUrl, "CARD")}
             alt={product.name}
-            className="w-full h-full object-contain"
+            className={`w-full h-full object-contain ${fade}`}
           />
         ) : (
-          <PackageIcon className="w-6 h-6 text-[#c5bdb1]" />
+          <PackageIcon className={`w-6 h-6 text-[#c5bdb1] ${fade}`} />
         )}
       </div>
 
-      <div className="p-[9px] pb-2.5 flex flex-col gap-[5px] flex-1">
+      <div className={`p-[9px] pb-2.5 flex flex-col gap-[5px] flex-1 ${fade}`}>
         <p className="text-xs font-medium text-[#2b2620] line-clamp-2 min-h-[33px] leading-tight">
           {product.name}
         </p>
