@@ -8,6 +8,9 @@ import { generateOrderPdf, generateOrderReceiptPdf } from "@/lib/order-pdf";
 import { sendOrderEmail } from "@/lib/order-email";
 import { sendOrderPdfWhatsAppMessage } from "@/lib/whatsapp";
 import { getEffectivePrice } from "@/lib/effective-price";
+import { CHECKOUT_LIMITS } from "@/lib/checkout-limits";
+import { isValidIsraeliPhone, normalizeIsraeliPhone } from "@/lib/phone";
+import { clientIp, recordHit, retryAfterSeconds } from "@/lib/rate-limit";
 
 // Paused on the owner's request while the WhatsApp Business number/template
 // setup is still pending - orders only go out by email for now. Flip back
@@ -28,24 +31,30 @@ export async function GET() {
 }
 
 const createOrderSchema = z.object({
-  customerName: z.string().min(1),
-  businessName: z.string().min(1),
-  customerPhone: z.string().min(5),
+  customerName: z.string().trim().min(1).max(CHECKOUT_LIMITS.name),
+  businessName: z.string().trim().min(1).max(CHECKOUT_LIMITS.businessName),
+  customerPhone: z.string().trim().max(CHECKOUT_LIMITS.phone),
   paymentMethod: z.enum([
     PAYMENT_METHOD.CASH,
     PAYMENT_METHOD.CREDIT,
     PAYMENT_METHOD.PAY_LATER,
   ]),
-  couponCode: z.string().min(1).optional(),
+  couponCode: z.string().trim().min(1).max(40).optional(),
   items: z
     .array(
       z.object({
-        productId: z.string().min(1),
-        quantity: z.number().int().positive(),
+        productId: z.string().min(1).max(50),
+        quantity: z.number().int().positive().max(10000),
       })
     )
-    .min(1),
+    .min(1)
+    .max(300),
 });
+
+// Every order sends the owner an email (and WhatsApp when enabled), so cap how
+// fast one visitor or one phone number can place them.
+const ORDER_LIMIT = 5;
+const ORDER_WINDOW_MS = 10 * 60 * 1000;
 
 export async function POST(request: Request) {
   const parsed = createOrderSchema.safeParse(await request.json());
@@ -55,6 +64,20 @@ export async function POST(request: Request) {
 
   const { customerName, businessName, customerPhone, paymentMethod, couponCode, items } = parsed.data;
 
+  if (!isValidIsraeliPhone(customerPhone)) {
+    return NextResponse.json({ error: "invalid_phone" }, { status: 400 });
+  }
+
+  const ipKey = `order:ip:${clientIp(request.headers)}`;
+  const phoneKey = `order:phone:${normalizeIsraeliPhone(customerPhone)}`;
+  const retryAfter = Math.max(retryAfterSeconds(ipKey, ORDER_LIMIT), retryAfterSeconds(phoneKey, ORDER_LIMIT));
+  if (retryAfter > 0) {
+    return NextResponse.json(
+      { error: "too_many_orders", retryAfterSeconds: retryAfter },
+      { status: 429, headers: { "Retry-After": String(retryAfter) } }
+    );
+  }
+
   const productIds = items.map((item) => item.productId);
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
@@ -62,6 +85,16 @@ export async function POST(request: Request) {
 
   if (products.length !== productIds.length) {
     return NextResponse.json({ error: "One or more products were not found" }, { status: 400 });
+  }
+
+  // The storefront hides "add to cart" for out-of-stock products, but a cart
+  // can be stale (or the request hand-crafted), so the server checks too.
+  const outOfStock = products.filter((product) => !product.inStock);
+  if (outOfStock.length > 0) {
+    return NextResponse.json(
+      { error: "out_of_stock", productIds: outOfStock.map((p) => p.id), names: outOfStock.map((p) => p.name) },
+      { status: 409 }
+    );
   }
 
   let discountPercent: number | null = null;
@@ -78,6 +111,9 @@ export async function POST(request: Request) {
   }
 
   const productById = new Map(products.map((product) => [product.id, product]));
+
+  recordHit(ipKey, ORDER_WINDOW_MS);
+  recordHit(phoneKey, ORDER_WINDOW_MS);
 
   const order = await prisma.order.create({
     data: {

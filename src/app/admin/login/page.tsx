@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
 import { LanguageSwitcher } from "@/components/language-switcher";
@@ -28,7 +29,9 @@ export default function AdminLoginPage() {
 
     setSubmitting(false);
     if (res?.error) {
-      setError(t("admin.login.invalid"));
+      // "too_many_attempts" is LOGIN_LOCKED_ERROR in src/lib/auth.ts (not
+      // imported: that module pulls in Prisma, which can't run in the browser).
+      setError(t(res.error === "too_many_attempts" ? "admin.login.tooManyAttempts" : "admin.login.invalid"));
       return;
     }
     router.push("/admin");
@@ -70,6 +73,9 @@ export default function AdminLoginPage() {
             </button>
             {error && <p className="text-sm text-[#b3402e]">{error}</p>}
           </form>
+          <Link href="/admin/forgot-password" className="block text-sm text-[#6b6259] underline mt-4">
+            {t("admin.passwordReset.forgotLink")}
+          </Link>
         </div>
       </div>
     </div>

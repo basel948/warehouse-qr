@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckIcon } from "@/components/icons";
+import { CheckIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
+import { Spinner, useToast } from "@/components/toast";
+import { ORDER_STATUS } from "@/lib/order-status";
 
 type OrderItem = {
   id: string;
@@ -28,11 +30,15 @@ type Order = {
 };
 
 const STATUSES = ["PENDING", "CONFIRMED", "CANCELLED"] as const;
-const FILTERS = ["ALL", "PENDING", "CONFIRMED"] as const;
+const FILTERS = ["ALL", "PENDING", "CONFIRMED", "CANCELLED"] as const;
 
 export default function AdminOrdersPage() {
   const { t } = useLocale();
+  const toast = useToast();
   const [orders, setOrders] = useState<Order[]>([]);
+  // Order whose trash button was clicked once and is waiting for "delete" / "cancel".
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<(typeof FILTERS)[number]>("ALL");
 
@@ -52,10 +58,13 @@ export default function AdminOrdersPage() {
     ALL: t("admin.orders.filterAll"),
     PENDING: t("admin.orders.filterPending"),
     CONFIRMED: t("admin.orders.filterConfirmed"),
+    CANCELLED: t("admin.orders.filterCancelled"),
   };
 
-  async function loadOrders() {
-    setLoading(true);
+  // `quiet` refreshes in the background after an action instead of swapping
+  // the whole list for the "loading..." text.
+  async function loadOrders({ quiet = false }: { quiet?: boolean } = {}) {
+    if (!quiet) setLoading(true);
     const res = await fetch("/api/orders");
     setOrders(await res.json());
     setLoading(false);
@@ -66,12 +75,30 @@ export default function AdminOrdersPage() {
   }, []);
 
   async function updateStatus(id: string, status: string) {
-    await fetch(`/api/orders/${id}`, {
+    setBusyId(id);
+    const res = await fetch(`/api/orders/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
-    });
-    loadOrders();
+    }).catch(() => null);
+    if (res?.ok) await loadOrders({ quiet: true });
+    setBusyId(null);
+    toast(
+      res?.ok ? t("admin.orders.toastStatusUpdated") : t("admin.orders.toastFailed"),
+      res?.ok ? "success" : "error"
+    );
+  }
+
+  async function deleteOrder(id: string) {
+    setConfirmDeleteId(null);
+    setBusyId(id);
+    const res = await fetch(`/api/orders/${id}`, { method: "DELETE" }).catch(() => null);
+    if (res?.ok) await loadOrders({ quiet: true });
+    setBusyId(null);
+    toast(
+      res?.ok ? t("admin.orders.toastDeleted") : t("admin.orders.toastFailed"),
+      res?.ok ? "success" : "error"
+    );
   }
 
   const pendingCount = orders.filter((o) => o.status === "PENDING").length;
@@ -134,8 +161,10 @@ export default function AdminOrdersPage() {
                   <span className="text-xs text-[#a39a8e]">
                     {new Date(order.createdAt).toLocaleString()}
                   </span>
+                  {busyId === order.id && <Spinner className="w-4 h-4 text-[#8a8177]" />}
                   <select
                     value={order.status}
+                    disabled={busyId === order.id}
                     onChange={(e) => updateStatus(order.id, e.target.value)}
                     className={`border rounded-[9px] px-2.5 py-1.5 text-[13px] font-semibold ${
                       order.status === "PENDING"
@@ -151,6 +180,33 @@ export default function AdminOrdersPage() {
                       </option>
                     ))}
                   </select>
+                  {order.status === ORDER_STATUS.CANCELLED &&
+                    (confirmDeleteId === order.id ? (
+                      <span className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => deleteOrder(order.id)}
+                          className="h-8 rounded-[8px] bg-[#b3402e] text-white text-xs font-semibold px-2.5"
+                        >
+                          {t("admin.orders.confirmDelete")}
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="h-8 rounded-[8px] border border-[#e6e0d6] text-[#6b6259] text-xs font-semibold px-2.5"
+                        >
+                          {t("admin.orders.cancel")}
+                        </button>
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmDeleteId(order.id)}
+                        disabled={busyId === order.id}
+                        title={t("admin.orders.delete")}
+                        aria-label={t("admin.orders.delete")}
+                        className="w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] text-[#b3402e]"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    ))}
                 </div>
               </div>
 

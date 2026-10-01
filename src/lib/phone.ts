@@ -15,3 +15,13 @@ export function normalizeIsraeliPhone(phone: string): string {
   }
   return digits;
 }
+
+/**
+ * True for an Israeli mobile (05X / 07X + 7 digits) or landline (02/03/04/
+ * 08/09 + 7 digits) number, in local or +972 form. Spaces, dashes and
+ * brackets are allowed; letters are not.
+ */
+export function isValidIsraeliPhone(phone: string): boolean {
+  if (!/^[\d\s\-+()]+$/.test(phone.trim())) return false;
+  return /^972(?:[57]\d{8}|[23489]\d{7})$/.test(normalizeIsraeliPhone(phone));
+}

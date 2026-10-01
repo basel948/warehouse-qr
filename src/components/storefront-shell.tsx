@@ -1,6 +1,8 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { CHECKOUT_LIMITS } from "@/lib/checkout-limits";
+import { isValidIsraeliPhone } from "@/lib/phone";
 import Link from "next/link";
 import { BrandLogo } from "@/components/brand-logo";
 import {
@@ -429,6 +431,11 @@ function CheckoutSheet({
       return;
     }
 
+    if (!isValidIsraeliPhone(customerPhone)) {
+      setError(t("checkout.errorInvalidPhone"));
+      return;
+    }
+
     if (!paymentMethod) {
       setError(t("checkout.errorMissingPaymentMethod"));
       return;
@@ -454,7 +461,11 @@ function CheckoutSheet({
 
       const data = await res.json();
       if (!res.ok) {
-        setError(t("checkout.errorFailed"));
+        if (data.error === "invalid_phone") setError(t("checkout.errorInvalidPhone"));
+        else if (data.error === "out_of_stock")
+          setError(t("checkout.errorOutOfStock", { names: (data.names ?? []).join(", ") }));
+        else if (data.error === "too_many_orders") setError(t("checkout.errorTooManyOrders"));
+        else setError(t("checkout.errorFailed"));
         return;
       }
 
@@ -585,6 +596,7 @@ function CheckoutSheet({
                 type="text"
                 placeholder={t("checkout.namePlaceholder")}
                 value={customerName}
+                maxLength={CHECKOUT_LIMITS.name}
                 onChange={(e) => setCustomerName(e.target.value)}
                 className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[13px] bg-[#f7f5f1] placeholder:text-[#a39a8e]"
               />
@@ -592,6 +604,7 @@ function CheckoutSheet({
                 type="text"
                 placeholder={t("checkout.businessNamePlaceholder")}
                 value={businessName}
+                maxLength={CHECKOUT_LIMITS.businessName}
                 onChange={(e) => setBusinessName(e.target.value)}
                 className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[13px] bg-[#f7f5f1] placeholder:text-[#a39a8e]"
               />
@@ -599,6 +612,9 @@ function CheckoutSheet({
                 type="tel"
                 placeholder={t("checkout.phonePlaceholder")}
                 value={customerPhone}
+                maxLength={CHECKOUT_LIMITS.phone}
+                inputMode="tel"
+                autoComplete="tel"
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[13px] bg-[#f7f5f1] placeholder:text-[#a39a8e]"
               />

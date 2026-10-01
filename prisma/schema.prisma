@@ -14,7 +14,22 @@ model Admin {
   id           String   @id @default(cuid())
   username     String   @unique
   passwordHash String
+  // Where "forgot password" links go; falls back to WAREHOUSE_OWNER_EMAIL.
+  email        String?
   createdAt    DateTime @default(now())
+  passwordResetTokens PasswordResetToken[]
+}
+
+// One-time "forgot password" links. Only a SHA-256 hash of the token is
+// stored, so a leaked database can't be used to reset a password.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  admin     Admin     @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  adminId   String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 }
 
 model Category {
