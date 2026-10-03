@@ -5,13 +5,15 @@ export function BrandLogo({ size = "md" }: { size?: "sm" | "md" }) {
   // A configured logo image is assumed to already contain the full wordmark
   // (like a horizontal lockup), so it's shown alone at a fixed height rather
   // than squeezed into an icon-sized box next to a separate text label.
+  // mix-blend-multiply drops the image's white background into whatever is
+  // behind it (the login page is cream, not white); no effect on white.
   if (WAREHOUSE_LOGO_URL) {
     return (
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={optimizedImage(WAREHOUSE_LOGO_URL, "LOGO")}
         alt={WAREHOUSE_NAME}
-        className={`${size === "sm" ? "h-8" : "h-10"} w-auto object-contain shrink-0`}
+        className={`${size === "sm" ? "h-8" : "h-10"} w-auto object-contain shrink-0 mix-blend-multiply`}
       />
     );
   }

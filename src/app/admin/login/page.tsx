@@ -41,10 +41,8 @@ export default function AdminLoginPage() {
   return (
     <div className="min-h-screen bg-[#f7f5f1] flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <div className="flex items-center gap-2.5 mb-5">
+        <div className="flex items-center justify-between gap-3 mb-4">
           <BrandLogo />
-        </div>
-        <div className="flex justify-end mb-3">
           <LanguageSwitcher />
         </div>
         <div className="bg-white border border-[#eae5dc] rounded-2xl p-[22px]">
