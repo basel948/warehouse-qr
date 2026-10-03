@@ -417,6 +417,12 @@ function CheckoutSheet({
     }
   }
 
+  // Pay-later is only offered with a coupon applied, so drop it as the chosen
+  // method whenever the coupon goes away (removed, or replaced by an invalid one).
+  useEffect(() => {
+    if (!appliedCoupon && paymentMethod === PAYMENT_METHOD.PAY_LATER) setPaymentMethod(null);
+  }, [appliedCoupon, paymentMethod]);
+
   function removeCoupon() {
     setAppliedCoupon(null);
     setCouponInput("");
@@ -465,6 +471,7 @@ function CheckoutSheet({
         else if (data.error === "out_of_stock")
           setError(t("checkout.errorOutOfStock", { names: (data.names ?? []).join(", ") }));
         else if (data.error === "too_many_orders") setError(t("checkout.errorTooManyOrders"));
+        else if (data.error === "pay_later_requires_coupon") setError(t("checkout.errorPayLaterNeedsCoupon"));
         else setError(t("checkout.errorFailed"));
         return;
       }
@@ -624,7 +631,7 @@ function CheckoutSheet({
               <p className="text-[13px] font-semibold text-[#6b6259] mb-2">
                 {t("checkout.paymentMethodLabel")}
               </p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className={`grid gap-2 ${appliedCoupon ? "grid-cols-3" : "grid-cols-2"}`}>
                 <PaymentMethodButton
                   active={paymentMethod === PAYMENT_METHOD.CASH}
                   icon={<CashIcon className="w-5 h-5" />}
@@ -637,12 +644,14 @@ function CheckoutSheet({
                   label={t("checkout.paymentCredit")}
                   onClick={() => setPaymentMethod(PAYMENT_METHOD.CREDIT)}
                 />
-                <PaymentMethodButton
-                  active={paymentMethod === PAYMENT_METHOD.PAY_LATER}
-                  icon={<ClockIcon className="w-5 h-5" />}
-                  label={t("checkout.paymentPayLater")}
-                  onClick={() => setPaymentMethod(PAYMENT_METHOD.PAY_LATER)}
-                />
+                {appliedCoupon && (
+                  <PaymentMethodButton
+                    active={paymentMethod === PAYMENT_METHOD.PAY_LATER}
+                    icon={<ClockIcon className="w-5 h-5" />}
+                    label={t("checkout.paymentPayLater")}
+                    onClick={() => setPaymentMethod(PAYMENT_METHOD.PAY_LATER)}
+                  />
+                )}
               </div>
 
               {paymentMethod === PAYMENT_METHOD.CREDIT && (

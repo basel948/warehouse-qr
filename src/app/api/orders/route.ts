@@ -109,6 +109,11 @@ export async function POST(request: Request) {
     discountPercent = coupon.discountPercent;
     appliedCouponCode = coupon.code;
   }
+  // Pay-later is only offered to buyers with a valid coupon; the checkout UI
+  // hides it otherwise, and this stops a hand-crafted request getting it.
+  if (paymentMethod === PAYMENT_METHOD.PAY_LATER && !appliedCouponCode) {
+    return NextResponse.json({ error: "pay_later_requires_coupon" }, { status: 400 });
+  }
 
   const productById = new Map(products.map((product) => [product.id, product]));
 
