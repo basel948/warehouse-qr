@@ -353,20 +353,6 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
 
 type AppliedCoupon = { code: string; discountPercent: number };
 
-function formatCardNumber(value: string): string {
-  return value
-    .replace(/[^0-9]/g, "")
-    .slice(0, 16)
-    .replace(/(.{4})/g, "$1 ")
-    .trim();
-}
-
-function formatCardExpiry(value: string): string {
-  const digits = value.replace(/[^0-9]/g, "").slice(0, 4);
-  if (digits.length <= 2) return digits;
-  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-}
-
 function CheckoutSheet({
   products,
   cart,
@@ -395,10 +381,9 @@ function CheckoutSheet({
   const [businessName, setBusinessName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
-  const [cardholderName, setCardholderName] = useState("");
-  const [cardNumber, setCardNumber] = useState("");
-  const [cardExpiry, setCardExpiry] = useState("");
-  const [cardCvv, setCardCvv] = useState("");
+  // Card payment isn't connected to a payment provider yet: tapping "credit"
+  // only shows a notice and never selects it (the orders API rejects it too).
+  const [creditNoticeShown, setCreditNoticeShown] = useState(false);
   const [couponInput, setCouponInput] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
@@ -501,6 +486,7 @@ function CheckoutSheet({
           setError(t("checkout.errorOutOfStock", { names: (data.names ?? []).join(", ") }));
         else if (data.error === "too_many_orders") setError(t("checkout.errorTooManyOrders"));
         else if (data.error === "pay_later_requires_coupon") setError(t("checkout.errorPayLaterNeedsCoupon"));
+        else if (data.error === "credit_unavailable") setError(t("checkout.creditUnavailable"));
         else setError(t("checkout.errorFailed"));
         return;
       }
@@ -658,63 +644,34 @@ function CheckoutSheet({
                   active={paymentMethod === PAYMENT_METHOD.CASH}
                   icon={<CashIcon className="w-5 h-5" />}
                   label={t("checkout.paymentCash")}
-                  onClick={() => setPaymentMethod(PAYMENT_METHOD.CASH)}
+                  onClick={() => {
+                    setPaymentMethod(PAYMENT_METHOD.CASH);
+                    setCreditNoticeShown(false);
+                  }}
                 />
                 <PaymentMethodButton
-                  active={paymentMethod === PAYMENT_METHOD.CREDIT}
+                  active={false}
                   icon={<CreditCardIcon className="w-5 h-5" />}
                   label={t("checkout.paymentCredit")}
-                  onClick={() => setPaymentMethod(PAYMENT_METHOD.CREDIT)}
+                  onClick={() => setCreditNoticeShown(true)}
                 />
                 {appliedCoupon && (
                   <PaymentMethodButton
                     active={paymentMethod === PAYMENT_METHOD.PAY_LATER}
                     icon={<ClockIcon className="w-5 h-5" />}
                     label={t("checkout.paymentPayLater")}
-                    onClick={() => setPaymentMethod(PAYMENT_METHOD.PAY_LATER)}
+                    onClick={() => {
+                      setPaymentMethod(PAYMENT_METHOD.PAY_LATER);
+                      setCreditNoticeShown(false);
+                    }}
                   />
                 )}
               </div>
 
-              {paymentMethod === PAYMENT_METHOD.CREDIT && (
-                <div className="mt-3 border border-[#e6e0d6] rounded-xl p-3.5 bg-[#f7f5f1] space-y-2.5">
-                  <div className="flex items-center gap-2 text-[#6b6259]">
-                    <CreditCardIcon className="w-4 h-4" />
-                    <span className="text-[12px] font-semibold">{t("checkout.paymentCredit")}</span>
-                  </div>
-                  <input
-                    type="text"
-                    placeholder={t("checkout.creditCardholderPlaceholder")}
-                    value={cardholderName}
-                    onChange={(e) => setCardholderName(e.target.value)}
-                    className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[11px] bg-white placeholder:text-[#a39a8e] text-sm"
-                  />
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder={t("checkout.creditCardNumberPlaceholder")}
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(formatCardNumber(e.target.value))}
-                    className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[11px] bg-white placeholder:text-[#a39a8e] text-sm tracking-wider"
-                  />
-                  <div className="flex gap-2.5">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder={t("checkout.creditExpiryPlaceholder")}
-                      value={cardExpiry}
-                      onChange={(e) => setCardExpiry(formatCardExpiry(e.target.value))}
-                      className="w-1/2 border border-[#e6e0d6] rounded-xl px-3.5 py-[11px] bg-white placeholder:text-[#a39a8e] text-sm"
-                    />
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      placeholder={t("checkout.creditCvvPlaceholder")}
-                      value={cardCvv}
-                      onChange={(e) => setCardCvv(e.target.value.replace(/[^0-9]/g, "").slice(0, 4))}
-                      className="w-1/2 border border-[#e6e0d6] rounded-xl px-3.5 py-[11px] bg-white placeholder:text-[#a39a8e] text-sm"
-                    />
-                  </div>
+              {creditNoticeShown && (
+                <div className="mt-3 flex items-start gap-2.5 border border-[#e6e0d6] rounded-xl p-3.5 bg-[#f7f5f1] text-[#6b6259]">
+                  <CreditCardIcon className="w-4 h-4 mt-0.5 shrink-0" />
+                  <p className="text-[13px] leading-relaxed">{t("checkout.creditUnavailable")}</p>
                 </div>
               )}
             </div>

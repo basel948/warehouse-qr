@@ -109,6 +109,12 @@ export async function POST(request: Request) {
     discountPercent = coupon.discountPercent;
     appliedCouponCode = coupon.code;
   }
+  // Card payment isn't connected to a payment provider yet, so nothing would
+  // actually be charged (yet a "paid" receipt would go out). The checkout UI
+  // only shows a "not available yet" notice; this blocks direct requests.
+  if (paymentMethod === PAYMENT_METHOD.CREDIT) {
+    return NextResponse.json({ error: "credit_unavailable" }, { status: 400 });
+  }
   // Pay-later is only offered to buyers with a valid coupon; the checkout UI
   // hides it otherwise, and this stops a hand-crafted request getting it.
   if (paymentMethod === PAYMENT_METHOD.PAY_LATER && !appliedCouponCode) {
@@ -169,8 +175,11 @@ export async function POST(request: Request) {
     // A receipt only makes sense once payment is actually taken at order
     // time - currently that's credit only (cash is collected on delivery,
     // pay-later is settled at month-end, so nothing's been paid yet).
+    // Unreachable while credit is rejected above (no payment provider yet);
+    // kept for when card payments are connected. The cast stops TypeScript
+    // flagging the comparison as impossible after that early return.
     const receiptPdfBuffer =
-      paymentMethod === PAYMENT_METHOD.CREDIT
+      (paymentMethod as PaymentMethod) === PAYMENT_METHOD.CREDIT
         ? await generateOrderReceiptPdf({
             orderId: order.id,
             createdAt: order.createdAt,
