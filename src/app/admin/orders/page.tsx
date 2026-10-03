@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { CheckIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Spinner, useToast } from "@/components/toast";
 import { ORDER_STATUS } from "@/lib/order-status";
 
@@ -35,9 +36,8 @@ const FILTERS = ["ALL", "PENDING", "CONFIRMED", "CANCELLED"] as const;
 export default function AdminOrdersPage() {
   const { t } = useLocale();
   const toast = useToast();
+  const confirm = useConfirm();
   const [orders, setOrders] = useState<Order[]>([]);
-  // Order whose trash button was clicked once and is waiting for "delete" / "cancel".
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [filterStatus, setFilterStatus] = useState<(typeof FILTERS)[number]>("ALL");
@@ -89,10 +89,14 @@ export default function AdminOrdersPage() {
     );
   }
 
-  async function deleteOrder(id: string) {
-    setConfirmDeleteId(null);
-    setBusyId(id);
-    const res = await fetch(`/api/orders/${id}`, { method: "DELETE" }).catch(() => null);
+  async function deleteOrder(order: Order) {
+    const ok = await confirm({
+      title: t("admin.confirmDialog.orderTitle", { name: order.customerName }),
+      message: t("admin.confirmDialog.orderBody"),
+    });
+    if (!ok) return;
+    setBusyId(order.id);
+    const res = await fetch(`/api/orders/${order.id}`, { method: "DELETE" }).catch(() => null);
     if (res?.ok) await loadOrders({ quiet: true });
     setBusyId(null);
     toast(
@@ -180,33 +184,17 @@ export default function AdminOrdersPage() {
                       </option>
                     ))}
                   </select>
-                  {order.status === ORDER_STATUS.CANCELLED &&
-                    (confirmDeleteId === order.id ? (
-                      <span className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => deleteOrder(order.id)}
-                          className="h-8 rounded-[8px] bg-[#b3402e] text-white text-xs font-semibold px-2.5"
-                        >
-                          {t("admin.orders.confirmDelete")}
-                        </button>
-                        <button
-                          onClick={() => setConfirmDeleteId(null)}
-                          className="h-8 rounded-[8px] border border-[#e6e0d6] text-[#6b6259] text-xs font-semibold px-2.5"
-                        >
-                          {t("admin.orders.cancel")}
-                        </button>
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => setConfirmDeleteId(order.id)}
-                        disabled={busyId === order.id}
-                        title={t("admin.orders.delete")}
-                        aria-label={t("admin.orders.delete")}
-                        className="w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] text-[#b3402e]"
-                      >
-                        <TrashIcon className="w-4 h-4" />
-                      </button>
-                    ))}
+                  {order.status === ORDER_STATUS.CANCELLED && (
+                    <button
+                      onClick={() => deleteOrder(order)}
+                      disabled={busyId === order.id}
+                      title={t("admin.orders.delete")}
+                      aria-label={t("admin.orders.delete")}
+                      className="w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] text-[#b3402e]"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
 

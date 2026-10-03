@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useConfirm } from "@/components/confirm-dialog";
 import { useLocale } from "@/components/locale-provider";
 
 type Coupon = {
@@ -13,6 +14,7 @@ type Coupon = {
 
 export default function AdminCouponsPage() {
   const { t } = useLocale();
+  const confirm = useConfirm();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -70,8 +72,13 @@ export default function AdminCouponsPage() {
     loadCoupons();
   }
 
-  async function deleteCoupon(id: string) {
-    await fetch(`/api/coupons/${id}`, { method: "DELETE" });
+  async function deleteCoupon(coupon: Coupon) {
+    const ok = await confirm({
+      title: t("admin.confirmDialog.couponTitle", { code: coupon.code }),
+      message: t("admin.confirmDialog.couponBody"),
+    });
+    if (!ok) return;
+    await fetch(`/api/coupons/${coupon.id}`, { method: "DELETE" });
     loadCoupons();
   }
 
@@ -142,7 +149,7 @@ export default function AdminCouponsPage() {
                     {coupon.active ? t("admin.coupons.deactivate") : t("admin.coupons.activate")}
                   </button>
                   <button
-                    onClick={() => deleteCoupon(coupon.id)}
+                    onClick={() => deleteCoupon(coupon)}
                     className="text-[13px] text-[#b3402e] underline"
                   >
                     {t("admin.coupons.delete")}

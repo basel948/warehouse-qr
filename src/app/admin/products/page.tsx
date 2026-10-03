@@ -5,6 +5,7 @@ import { ImageUploadField } from "@/components/image-upload-field";
 import { CategoryList } from "./category-list";
 import { DuplicateIcon, EditIcon, PackageIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
+import { useConfirm } from "@/components/confirm-dialog";
 import { Spinner, useToast } from "@/components/toast";
 import { optimizedImage } from "@/lib/image-url";
 
@@ -110,11 +111,10 @@ type ProductAction = "stock" | "sale" | "duplicate" | "delete" | "save";
 export default function AdminProductsPage() {
   const { t } = useLocale();
   const toast = useToast();
+  const confirm = useConfirm();
   // Which product action is in flight, so its button can show a spinner and
   // the row's other buttons can't be double-clicked meanwhile.
   const [busy, setBusy] = useState<{ id: string; action: ProductAction } | null>(null);
-  // Product whose trash button was clicked once and is waiting for "delete" / "cancel".
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
@@ -198,6 +198,15 @@ export default function AdminProductsPage() {
     loadAll();
   }
 
+  async function removeCategoryImage(category: Category) {
+    const ok = await confirm({
+      title: t("admin.confirmDialog.categoryImageTitle", { name: category.name }),
+      message: t("admin.confirmDialog.categoryImageBody"),
+      confirmLabel: t("admin.confirmDialog.remove"),
+    });
+    if (ok) await setCategoryImage(category.id, "");
+  }
+
   async function setCategoryImage(id: string, url: string) {
     setCategories((current) =>
       current.map((category) => (category.id === id ? { ...category, imageUrl: url || null } : category))
@@ -227,6 +236,22 @@ export default function AdminProductsPage() {
   }
 
   async function deleteCategory(id: string) {
+    const category = categories.find((c) => c.id === id);
+    if (!category) return;
+    // Products are never deleted with a category, but ones with no other
+    // category drop out of the shop, which looks like deletion to a buyer.
+    const inCategory = products.filter((p) => p.categories.some((c) => c.id === id));
+    const leftWithout = inCategory.filter((p) => p.categories.length === 1).length;
+    const ok = await confirm({
+      title: t("admin.confirmDialog.categoryTitle", { name: category.name }),
+      message:
+        inCategory.length === 0
+          ? t("admin.confirmDialog.categoryBodyEmpty")
+          : leftWithout > 0
+            ? t("admin.confirmDialog.categoryBodyOrphans", { count: inCategory.length, orphans: leftWithout })
+            : t("admin.confirmDialog.categoryBody", { count: inCategory.length }),
+    });
+    if (!ok) return;
     await fetch(`/api/categories/${id}`, { method: "DELETE" });
     loadAll();
   }
@@ -268,6 +293,13 @@ export default function AdminProductsPage() {
   }
 
   async function deleteSubcategory(id: string) {
+    const subcategory = subcategories.find((s) => s.id === id);
+    if (!subcategory) return;
+    const ok = await confirm({
+      title: t("admin.confirmDialog.subcategoryTitle", { name: subcategory.name }),
+      message: t("admin.confirmDialog.subcategoryBody"),
+    });
+    if (!ok) return;
     await fetch(`/api/subcategories/${id}`, { method: "DELETE" });
     loadAll();
   }
@@ -311,6 +343,13 @@ export default function AdminProductsPage() {
   }
 
   async function duplicateProduct(product: Product) {
+    const ok = await confirm({
+      title: t("admin.confirmDialog.duplicateTitle", { name: product.name }),
+      message: t("admin.confirmDialog.duplicateBody", { copy: t("admin.products.duplicateName", { name: product.name }) }),
+      confirmLabel: t("admin.confirmDialog.duplicate"),
+      tone: "normal",
+    });
+    if (!ok) return;
     setBusy({ id: product.id, action: "duplicate" });
     const res = await fetch("/api/products", {
       method: "POST",
@@ -390,6 +429,14 @@ export default function AdminProductsPage() {
       }
     }
 
+    const ok = await confirm({
+      title: t("admin.confirmDialog.saveTitle", { name: editName.trim() }),
+      message: t("admin.confirmDialog.saveBody"),
+      confirmLabel: t("admin.confirmDialog.save"),
+      tone: "normal",
+    });
+    if (!ok) return;
+
     setBusy({ id: productId, action: "save" });
     const res = await fetch(`/api/products/${productId}`, {
       method: "PATCH",
@@ -466,7 +513,23 @@ export default function AdminProductsPage() {
     else toast(res ? failureMessage(res) : t("admin.products.toastFailed"), "error");
   }
 
-  function toggleStock(product: Product) {
+  async function toggleStock(product: Product) {
+    const ok = await confirm(
+      product.inStock
+        ? {
+            title: t("admin.confirmDialog.outOfStockTitle", { name: product.name }),
+            message: t("admin.confirmDialog.outOfStockBody"),
+            confirmLabel: t("admin.confirmDialog.markOutOfStock"),
+            tone: "normal",
+          }
+        : {
+            title: t("admin.confirmDialog.inStockTitle", { name: product.name }),
+            message: t("admin.confirmDialog.inStockBody"),
+            confirmLabel: t("admin.confirmDialog.markInStock"),
+            tone: "normal",
+          }
+    );
+    if (!ok) return;
     runAction(
       product,
       "stock",
@@ -480,8 +543,15 @@ export default function AdminProductsPage() {
     );
   }
 
-  function toggleSale(product: Product) {
+  async function toggleSale(product: Product) {
     if (product.onSale) {
+      const ok = await confirm({
+        title: t("admin.confirmDialog.endSaleTitle", { name: product.name }),
+        message: t("admin.confirmDialog.endSaleBody"),
+        confirmLabel: t("admin.confirmDialog.endSale"),
+        tone: "normal",
+      });
+      if (!ok) return;
       runAction(
         product,
         "sale",
@@ -499,8 +569,12 @@ export default function AdminProductsPage() {
     setEditOnSale(true);
   }
 
-  function deleteProduct(product: Product) {
-    setConfirmDeleteId(null);
+  async function deleteProduct(product: Product) {
+    const ok = await confirm({
+      title: t("admin.confirmDialog.productTitle", { name: product.name }),
+      message: t("admin.confirmDialog.productBody"),
+    });
+    if (!ok) return;
     runAction(
       product,
       "delete",
@@ -569,7 +643,7 @@ export default function AdminProductsPage() {
               {category.imageUrl && (
                 <button
                   type="button"
-                  onClick={() => setCategoryImage(category.id, "")}
+                  onClick={() => removeCategoryImage(category)}
                   className="mt-2 text-xs text-[#a39a8e] hover:text-[#b3402e]"
                 >
                   {t("admin.products.removeCategoryImage")}
@@ -1037,32 +1111,15 @@ export default function AdminProductsPage() {
                       >
                         {actionIcon(product, "duplicate", <DuplicateIcon className="w-4 h-4" />)}
                       </button>
-                      {confirmDeleteId === product.id ? (
-                        <span className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => deleteProduct(product)}
-                            className="h-8 rounded-[8px] bg-[#b3402e] text-white text-xs font-semibold px-2.5"
-                          >
-                            {t("admin.products.confirmDelete")}
-                          </button>
-                          <button
-                            onClick={() => setConfirmDeleteId(null)}
-                            className="h-8 rounded-[8px] border border-[#e6e0d6] text-[#6b6259] text-xs font-semibold px-2.5"
-                          >
-                            {t("admin.products.cancel")}
-                          </button>
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => setConfirmDeleteId(product.id)}
-                          disabled={busy?.id === product.id}
-                          title={t("admin.products.delete")}
-                          aria-label={t("admin.products.delete")}
-                          className="w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] text-[#b3402e]"
-                        >
-                          {actionIcon(product, "delete", <TrashIcon className="w-4 h-4" />)}
-                        </button>
-                      )}
+                      <button
+                        onClick={() => deleteProduct(product)}
+                        disabled={busy?.id === product.id}
+                        title={t("admin.products.delete")}
+                        aria-label={t("admin.products.delete")}
+                        className="w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] text-[#b3402e]"
+                      >
+                        {actionIcon(product, "delete", <TrashIcon className="w-4 h-4" />)}
+                      </button>
                     </div>
                   </li>
                 )
