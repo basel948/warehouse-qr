@@ -362,6 +362,16 @@ function CheckoutSheet({
   onOrdered: () => void;
 }) {
   const { t } = useLocale();
+
+  // Freeze the page behind the checkout window so it can't scroll while open.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
   const [customerName, setCustomerName] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -489,8 +499,15 @@ function CheckoutSheet({
   }
 
   return (
-    <div className="fixed inset-0 z-30 flex items-end sm:items-center sm:justify-center bg-[#1a1714]/55">
-      <div className="w-full sm:max-w-md bg-white rounded-t-[22px] sm:rounded-2xl max-h-[90vh] overflow-y-auto">
+    // A centered window on every screen size. The dark overlay covers the whole
+    // page, so nothing behind it can be tapped while checkout is open.
+    <div className="fixed inset-0 z-30 flex items-center justify-center p-4 bg-[#1a1714]/55">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("checkout.title")}
+        className="w-full max-w-md bg-white rounded-2xl max-h-[90dvh] overflow-y-auto overscroll-contain shadow-xl"
+      >
         {success ? (
           <div className="p-8 text-center">
             <div className="w-[52px] h-[52px] rounded-full bg-[#f1f7f1] text-[#2f6b3a] flex items-center justify-center mx-auto mb-3.5">
@@ -517,7 +534,6 @@ function CheckoutSheet({
           </div>
         ) : (
           <div className="p-[18px] pb-[22px]">
-            <div className="w-[38px] h-1 rounded-full bg-[#e0d9cf] mx-auto mb-4 sm:hidden" aria-hidden />
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-[19px] font-bold text-[#1a1714]">{t("checkout.title")}</h2>
               <button

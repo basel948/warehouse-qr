@@ -164,6 +164,7 @@ export const dictionaries = {
         print: "הדפסה",
       },
       products: {
+        addProductToggle: "הוספת מוצר חדש",
         toastAdded: "המוצר נוסף",
         toastSaved: "השינויים נשמרו",
         toastDuplicated: "המוצר שוכפל – אפשר לערוך את העותק",
@@ -459,6 +460,7 @@ export const dictionaries = {
         print: "طباعة",
       },
       products: {
+        addProductToggle: "إضافة منتج جديد",
         toastAdded: "تمت إضافة المنتج",
         toastSaved: "تم حفظ التغييرات",
         toastDuplicated: "تم نسخ المنتج – يمكنك تعديل النسخة",

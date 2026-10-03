@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ImageUploadField } from "@/components/image-upload-field";
 import { CategoryList } from "./category-list";
-import { DuplicateIcon, EditIcon, PackageIcon, TrashIcon } from "@/components/icons";
+import { ChevronDownIcon, DuplicateIcon, EditIcon, PackageIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Spinner, useToast } from "@/components/toast";
@@ -137,6 +137,7 @@ export default function AdminProductsPage() {
   const [subcategoryError, setSubcategoryError] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -717,6 +718,100 @@ export default function AdminProductsPage() {
           {t("admin.products.productsTitle")}
         </h1>
 
+        {/* Collapsed by default so the product list and search are what you see
+            first; the arrow opens the add-product form. */}
+        <div className="bg-white border border-[#eae5dc] rounded-[14px] mb-4">
+          <button
+            type="button"
+            onClick={() => setAddOpen((open) => !open)}
+            aria-expanded={addOpen}
+            className="w-full flex items-center justify-between gap-3 px-[18px] py-3.5 text-sm font-semibold text-[#1a1714]"
+          >
+            {t("admin.products.addProductToggle")}
+            <ChevronDownIcon className={`w-5 h-5 text-[#6b6259] transition-transform ${addOpen ? "rotate-180" : ""}`} />
+          </button>
+          {addOpen && (
+            <form
+              onSubmit={addProduct}
+              className="px-[18px] pb-[18px] pt-1 space-y-2.5"
+            >
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_130px] gap-2.5">
+                <input
+                  type="text"
+                  placeholder={t("admin.products.namePlaceholder")}
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
+                />
+                <CategoryMultiSelect
+                  categories={categories}
+                  selectedIds={categoryIds}
+                  onChange={(ids) => {
+                    setCategoryIds(ids);
+                    if (!subcategories.some((s) => s.id === subcategoryId && ids.includes(s.categoryId))) {
+                      setSubcategoryId("");
+                    }
+                  }}
+                  placeholder={t("admin.products.noCategoryOption")}
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder={t("admin.products.pricePlaceholder")}
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
+                />
+              </div>
+              {categoryIds.length > 0 && subcategories.some((s) => categoryIds.includes(s.categoryId)) && (
+                <select
+                  value={subcategoryId}
+                  onChange={(e) => setSubcategoryId(e.target.value)}
+                  className="w-full border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
+                >
+                  <option value="">{t("admin.products.noSubcategoryOption")}</option>
+                  {subcategories
+                    .filter((s) => categoryIds.includes(s.categoryId))
+                    .map((subcategory) => (
+                      <option key={subcategory.id} value={subcategory.id}>
+                        {subcategory.name}
+                      </option>
+                    ))}
+                </select>
+              )}
+              <input
+                type="text"
+                placeholder={t("admin.products.descriptionPlaceholder")}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                className="w-full border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
+              />
+              <div className="flex items-center gap-3.5 flex-wrap">
+                <ImageUploadField
+                  value={imageUrl}
+                  onChange={setImageUrl}
+                  uploadLabel={t("admin.products.uploadImage")}
+                  uploadingLabel={t("admin.products.uploading")}
+                  hintText={t("admin.products.uploadHint")}
+                  errorMessages={{
+                    notImage: t("admin.products.uploadErrorNotImage"),
+                    tooLarge: t("admin.products.uploadErrorTooLarge"),
+                    network: t("admin.products.uploadErrorNetwork"),
+                    generic: t("admin.products.uploadErrorGeneric"),
+                  }}
+                />
+                <button
+                  type="submit"
+                  className="ms-auto bg-[var(--accent)] text-white rounded-[10px] px-5 py-2.5 text-sm font-semibold"
+                >
+                  {t("admin.products.addProduct")}
+                </button>
+              </div>
+              {error && <p className="text-sm text-[#b3402e]">{error}</p>}
+            </form>
+          )}
+        </div>
+
         <input
           type="search"
           placeholder={t("admin.products.searchPlaceholder")}
@@ -725,84 +820,6 @@ export default function AdminProductsPage() {
           className="w-full border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5 mb-4"
         />
 
-        <form
-          onSubmit={addProduct}
-          className="bg-white border border-[#eae5dc] rounded-[14px] p-[18px] space-y-2.5 mb-6"
-        >
-          <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_130px] gap-2.5">
-            <input
-              type="text"
-              placeholder={t("admin.products.namePlaceholder")}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
-            />
-            <CategoryMultiSelect
-              categories={categories}
-              selectedIds={categoryIds}
-              onChange={(ids) => {
-                setCategoryIds(ids);
-                if (!subcategories.some((s) => s.id === subcategoryId && ids.includes(s.categoryId))) {
-                  setSubcategoryId("");
-                }
-              }}
-              placeholder={t("admin.products.noCategoryOption")}
-            />
-            <input
-              type="number"
-              step="0.01"
-              placeholder={t("admin.products.pricePlaceholder")}
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              className="border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
-            />
-          </div>
-          {categoryIds.length > 0 && subcategories.some((s) => categoryIds.includes(s.categoryId)) && (
-            <select
-              value={subcategoryId}
-              onChange={(e) => setSubcategoryId(e.target.value)}
-              className="w-full border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
-            >
-              <option value="">{t("admin.products.noSubcategoryOption")}</option>
-              {subcategories
-                .filter((s) => categoryIds.includes(s.categoryId))
-                .map((subcategory) => (
-                  <option key={subcategory.id} value={subcategory.id}>
-                    {subcategory.name}
-                  </option>
-                ))}
-            </select>
-          )}
-          <input
-            type="text"
-            placeholder={t("admin.products.descriptionPlaceholder")}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
-          />
-          <div className="flex items-center gap-3.5 flex-wrap">
-            <ImageUploadField
-              value={imageUrl}
-              onChange={setImageUrl}
-              uploadLabel={t("admin.products.uploadImage")}
-              uploadingLabel={t("admin.products.uploading")}
-              hintText={t("admin.products.uploadHint")}
-              errorMessages={{
-                notImage: t("admin.products.uploadErrorNotImage"),
-                tooLarge: t("admin.products.uploadErrorTooLarge"),
-                network: t("admin.products.uploadErrorNetwork"),
-                generic: t("admin.products.uploadErrorGeneric"),
-              }}
-            />
-            <button
-              type="submit"
-              className="ms-auto bg-[var(--accent)] text-white rounded-[10px] px-5 py-2.5 text-sm font-semibold"
-            >
-              {t("admin.products.addProduct")}
-            </button>
-          </div>
-          {error && <p className="text-sm text-[#b3402e]">{error}</p>}
-        </form>
 
         {loading ? (
           <p className="text-sm text-[#8a8177]">{t("admin.products.loading")}</p>
