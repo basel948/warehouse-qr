@@ -66,6 +66,10 @@ export function CategorySections({
   const navRef = useRef<HTMLElement | null>(null);
   const chipRefs = useRef(new Map<string, HTMLAnchorElement>());
   const [activeId, setActiveId] = useState<string | null>(null);
+  // While a chip-triggered smooth scroll is running, the scroll position
+  // passes other sections; this stops their chips flashing on the way.
+  const programmaticScroll = useRef(false);
+  const releaseScrollLock = useRef<(() => void) | null>(null);
 
   // Expose the chip bar's height as --section-nav-h, so sections scroll to
   // just below the sticky header + chip bar instead of underneath them.
@@ -90,6 +94,7 @@ export function CategorySections({
     let frame = 0;
     function update() {
       frame = 0;
+      if (programmaticScroll.current) return;
       const offset = (navRef.current?.getBoundingClientRect().bottom ?? 0) + 24;
       let current = sections[0]?.id ?? null;
       for (const section of sections) {
@@ -109,10 +114,68 @@ export function CategorySections({
     };
   }, [hasSectionNav, sections]);
 
-  // Keep the highlighted chip visible in the sideways-scrolling bar.
+  // Keep the highlighted chip centered in the sideways-scrolling bar. Only
+  // the bar itself scrolls (scrollIntoView would also nudge the page and
+  // fight the page's own smooth scroll). A relative scrollBy works the same
+  // in RTL and LTR.
   useEffect(() => {
-    if (activeId) chipRefs.current.get(activeId)?.scrollIntoView({ block: "nearest", inline: "center" });
+    const nav = navRef.current;
+    const chip = activeId ? chipRefs.current.get(activeId) : null;
+    if (!nav || !chip) return;
+    const navBox = nav.getBoundingClientRect();
+    const chipBox = chip.getBoundingClientRect();
+    const delta = chipBox.left + chipBox.width / 2 - (navBox.left + navBox.width / 2);
+    if (Math.abs(delta) > 4) nav.scrollBy({ left: delta, behavior: "smooth" });
   }, [activeId]);
+
+  function goToSection(event: React.MouseEvent<HTMLAnchorElement>, id: string) {
+    const target = document.getElementById(`section-${id}`);
+    if (!target) return;
+    event.preventDefault();
+    // A quick second tap replaces the first tap's scroll.
+    releaseScrollLock.current?.();
+    setActiveId(id);
+    history.replaceState(null, "", `#section-${id}`);
+
+    const stickyBottom = navRef.current?.getBoundingClientRect().bottom ?? 0;
+    const start = window.scrollY;
+    const end = target.getBoundingClientRect().top + start - stickyBottom - 12;
+    const distance = end - start;
+    if (Math.abs(distance) < 2) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      window.scrollTo(0, end);
+      return;
+    }
+
+    // Our own animation rather than behavior: "smooth", whose speed browsers
+    // fix (and which feels rushed on phones): ~0.7s for short jumps, up to
+    // ~1.1s for long ones, easing in and out.
+    const duration = Math.min(1100, 700 + Math.abs(distance) * 0.15);
+    const startedAt = performance.now();
+    let frame = 0;
+    programmaticScroll.current = true;
+
+    const release = () => {
+      programmaticScroll.current = false;
+      releaseScrollLock.current = null;
+      cancelAnimationFrame(frame);
+      window.removeEventListener("wheel", release);
+      window.removeEventListener("touchstart", release);
+    };
+    releaseScrollLock.current = release;
+    // The buyer scrolling by hand takes over immediately.
+    window.addEventListener("wheel", release, { once: true, passive: true });
+    window.addEventListener("touchstart", release, { once: true, passive: true });
+
+    const step = (now: number) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = progress < 0.5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
+      window.scrollTo(0, start + distance * eased);
+      if (progress < 1) frame = requestAnimationFrame(step);
+      else release();
+    };
+    frame = requestAnimationFrame(step);
+  }
 
   return (
     <div>
@@ -138,6 +201,7 @@ export function CategorySections({
                       else chipRefs.current.delete(section.id);
                     }}
                     href={`#section-${section.id}`}
+                    onClick={(event) => goToSection(event, section.id)}
                     aria-current={active ? "true" : undefined}
                     className={`shrink-0 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
                       active
