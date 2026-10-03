@@ -36,6 +36,9 @@ model Category {
   id            String        @id @default(cuid())
   name          String        @unique
   order         Int           @default(0)
+  // Home page tile image; a transparent PNG of the category's products works
+  // best, since the tile lets the image rise above its background strip.
+  imageUrl      String?
   createdAt     DateTime      @default(now())
   products      Product[]
   subcategories Subcategory[]

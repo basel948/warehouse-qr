@@ -4,17 +4,12 @@ import { SaleCarousel } from "@/components/sale-carousel";
 
 export const dynamic = "force-dynamic";
 
-const SANO_BRAND_MATCH = "סנו";
 const SALE_PRODUCTS_LIMIT = 10;
 
 export default async function HomePage() {
   const categories = await prisma.category.findMany({
     orderBy: { order: "asc" },
-    select: { id: true, name: true },
-  });
-
-  const sanoCount = await prisma.product.count({
-    where: { name: { contains: SANO_BRAND_MATCH } },
+    select: { id: true, name: true, imageUrl: true },
   });
 
   const saleProducts = await prisma.product.findMany({
@@ -27,7 +22,7 @@ export default async function HomePage() {
   return (
     <div>
       <SaleCarousel products={saleProducts} />
-      <HomeCategoryGrid categories={categories} showSano={sanoCount > 0} />
+      <HomeCategoryGrid categories={categories} />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 const updateCategorySchema = z.object({
   name: z.string().min(1).optional(),
   order: z.number().int().optional(),
+  imageUrl: z.string().url().nullable().optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {

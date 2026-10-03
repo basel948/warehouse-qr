@@ -19,8 +19,8 @@ export const IMAGE_PRESET = {
   SMALL: "w-240,c-at_max",
   /** Product cards in grids, sale carousel product shots. */
   CARD: "w-500,c-at_max",
-  /** Home page category circles. */
-  TILE: "w-600,c-at_max",
+  /** Home page category tiles (up to ~700px wide on desktop). */
+  TILE: "w-1400,c-at_max",
   /** Product detail modal (largest view of a product). */
   DETAIL: "w-1200,c-at_max,q-90,e-sharpen-60",
   /** Header/login logo (shown 32-40px tall). */

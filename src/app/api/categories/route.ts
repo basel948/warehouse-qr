@@ -14,6 +14,7 @@ export async function GET() {
 const createCategorySchema = z.object({
   name: z.string().min(1),
   order: z.number().int().optional(),
+  imageUrl: z.string().url().nullable().optional(),
 });
 
 export async function POST(request: Request) {

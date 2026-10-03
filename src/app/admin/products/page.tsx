@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ImageUploadField } from "@/components/image-upload-field";
+import { CategoryList } from "./category-list";
 import { DuplicateIcon, EditIcon, PackageIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 import { Spinner, useToast } from "@/components/toast";
@@ -11,6 +12,7 @@ type Category = {
   id: string;
   name: string;
   order: number;
+  imageUrl: string | null;
 };
 
 type Subcategory = {
@@ -128,6 +130,7 @@ export default function AdminProductsPage() {
 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [imageCategoryId, setImageCategoryId] = useState("");
 
   const [subcatManagerCategoryId, setSubcatManagerCategoryId] = useState("");
   const [newSubcategoryName, setNewSubcategoryName] = useState("");
@@ -193,6 +196,34 @@ export default function AdminProductsPage() {
 
     setNewCategoryName("");
     loadAll();
+  }
+
+  async function setCategoryImage(id: string, url: string) {
+    setCategories((current) =>
+      current.map((category) => (category.id === id ? { ...category, imageUrl: url || null } : category))
+    );
+    await fetch(`/api/categories/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageUrl: url || null }),
+    });
+  }
+
+  // Saves a new category order after a drag. Renumbers 0..n (which also fixes
+  // any duplicate `order` values left from before) and only sends the rows
+  // whose position changed. The home page lists categories in this order.
+  async function saveCategoryOrder(reordered: Category[]) {
+    const changed = reordered.filter((category, position) => category.order !== position);
+    setCategories(reordered.map((category, position) => ({ ...category, order: position })));
+    await Promise.all(
+      changed.map((category) =>
+        fetch(`/api/categories/${category.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ order: reordered.indexOf(category) }),
+        })
+      )
+    );
   }
 
   async function deleteCategory(id: string) {
@@ -511,23 +542,42 @@ export default function AdminProductsPage() {
         </form>
         {categoryError && <p className="text-sm text-[#b3402e] mb-3">{categoryError}</p>}
 
-        <ul className="flex flex-wrap gap-2">
-          {categories.map((category) => (
-            <li
-              key={category.id}
-              className="flex items-center gap-2 border border-[#e6e0d6] bg-white rounded-full ps-3.5 pe-1.5 py-1.5 text-[13px]"
-            >
-              {category.name}
-              <button
-                onClick={() => deleteCategory(category.id)}
-                aria-label={t("admin.products.deleteCategoryAria", { name: category.name })}
-                className="text-[#a39a8e] hover:text-[#b3402e] rounded-full w-5 h-5 leading-none"
-              >
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
+        <CategoryList
+          categories={categories}
+          expandedId={imageCategoryId}
+          onToggleExpanded={(id) => setImageCategoryId(imageCategoryId === id ? "" : id)}
+          onDelete={deleteCategory}
+          onReorder={saveCategoryOrder}
+          renderExpanded={(category) => (
+            <div className="border-t border-[#eae5dc] px-3.5 py-3">
+              <p className="text-sm font-semibold text-[#1a1714] mb-2">
+                {t("admin.products.categoryImageTitle", { name: category.name })}
+              </p>
+              <ImageUploadField
+                value={category.imageUrl ?? ""}
+                onChange={(url) => setCategoryImage(category.id, url)}
+                uploadLabel={t("admin.products.uploadImage")}
+                uploadingLabel={t("admin.products.uploading")}
+                hintText={t("admin.products.categoryImageHint")}
+                errorMessages={{
+                  notImage: t("admin.products.uploadErrorNotImage"),
+                  tooLarge: t("admin.products.uploadErrorTooLarge"),
+                  network: t("admin.products.uploadErrorNetwork"),
+                  generic: t("admin.products.uploadErrorGeneric"),
+                }}
+              />
+              {category.imageUrl && (
+                <button
+                  type="button"
+                  onClick={() => setCategoryImage(category.id, "")}
+                  className="mt-2 text-xs text-[#a39a8e] hover:text-[#b3402e]"
+                >
+                  {t("admin.products.removeCategoryImage")}
+                </button>
+              )}
+            </div>
+          )}
+        />
       </div>
 
       <div>

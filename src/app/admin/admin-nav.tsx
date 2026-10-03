@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { BrandLogo } from "@/components/brand-logo";
-import { ChevronDownIcon } from "@/components/icons";
+import { ChevronDownIcon, StoreIcon } from "@/components/icons";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
 
@@ -77,6 +77,17 @@ export function AdminNav() {
         </div>
 
         <div className="ms-auto shrink-0 flex items-center gap-3.5">
+          {/* New tab so the admin page stays open behind the buyer's view. */}
+          <a
+            href="/"
+            target="_blank"
+            rel="noopener"
+            aria-label={t("nav.viewStore")}
+            className="flex items-center gap-1.5 text-sm font-medium text-[#6b6259] hover:text-[#1a1714]"
+          >
+            <StoreIcon className="w-[18px] h-[18px]" />
+            <span className="hidden sm:inline">{t("nav.viewStore")}</span>
+          </a>
           <LanguageSwitcher />
           <button
             onClick={() => signOut({ callbackUrl: "/admin/login" })}
