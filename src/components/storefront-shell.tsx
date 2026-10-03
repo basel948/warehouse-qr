@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { CHECKOUT_LIMITS } from "@/lib/checkout-limits";
 import { isValidIsraeliPhone } from "@/lib/phone";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
 import {
   CashIcon,
@@ -27,6 +28,11 @@ type CartContextValue = {
   addToCart: (productId: string) => void;
   setQuantity: (productId: string, quantity: number) => void;
   openProductDetail: (product: Product) => void;
+  /** Every product (null until loaded), for showing cart items from any page. */
+  allProducts: Product[] | null;
+  cartTotal: number;
+  /** Opens the payment (checkout) window. */
+  openCheckout: () => void;
 };
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -50,6 +56,7 @@ function compareProductNames(a: Product, b: Product): number {
 
 export function StorefrontShell({ children }: { children: React.ReactNode }) {
   const { t } = useLocale();
+  const pathname = usePathname();
   const [cart, setCart] = useState<Record<string, number>>({});
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<Product | null>(null);
@@ -167,6 +174,9 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
     addToCart,
     setQuantity,
     openProductDetail: setExpandedProduct,
+    allProducts,
+    cartTotal,
+    openCheckout,
   };
 
   return (
@@ -251,15 +261,17 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
           </footer>
         )}
 
-        {cartCount > 0 && !checkoutOpen && (
+        {/* Floating "to cart" bar on every shop page except the cart itself,
+            which has its own "continue to payment" button. */}
+        {cartCount > 0 && !checkoutOpen && pathname !== "/cart" && (
           <div className="fixed bottom-0 inset-x-0 z-20 px-3.5 pt-4 pb-4 bg-gradient-to-t from-[#f7f5f1] from-[62%] to-transparent flex justify-center">
-            <button
-              onClick={openCheckout}
+            <Link
+              href="/cart"
               className="w-1/2 min-w-[220px] bg-[var(--accent)] text-white rounded-full px-6 py-3.5 flex items-center justify-between font-bold text-base shadow-[0_10px_20px_-8px_rgba(0,0,0,0.45)]"
             >
               <span>₪{cartTotal.toFixed(2)}</span>
               <span className="flex items-center gap-2">
-                {t("catalog.checkout")}
+                {t("catalog.viewCart", { count: cartCount })}
                 <svg
                   width="18"
                   height="18"
@@ -275,7 +287,7 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
                   <path d="M11 18l-6-6 6-6" />
                 </svg>
               </span>
-            </button>
+            </Link>
           </div>
         )}
 
@@ -544,19 +556,6 @@ function CheckoutSheet({
                 ×
               </button>
             </div>
-
-            <ul className="divide-y divide-[#f0ece5] mb-4">
-              {lines.map((line) => (
-                <li key={line.product.id} className="py-[11px] flex items-center justify-between text-sm">
-                  <span className="text-[#2b2620]">
-                    {line.quantity}x {line.product.name}
-                  </span>
-                  <span className="font-semibold text-[#1a1714]">
-                    ₪{(getEffectivePrice(line.product) * line.quantity).toFixed(2)}
-                  </span>
-                </li>
-              ))}
-            </ul>
 
             <div className="mb-4">
               {appliedCoupon ? (
