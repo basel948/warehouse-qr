@@ -1,14 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { PageBackLink } from "@/components/page-back-link";
 import { ProductFilterBar } from "@/components/product-filter-bar";
 import { useLocale } from "@/components/locale-provider";
 import { useCart } from "@/components/storefront-shell";
 import { type Product, ProductCard } from "@/components/catalog-ui";
 import { useProductFilters } from "@/lib/use-product-filters";
-import { getCategoryIcon } from "@/lib/category-icons";
-import { optimizedImage } from "@/lib/image-url";
 
 const OTHER_SECTION_ID = "other";
 
@@ -65,6 +63,56 @@ export function CategorySections({
   }, [sorted, subcategories, t]);
 
   const hasSectionNav = sections.length > 1;
+  const navRef = useRef<HTMLElement | null>(null);
+  const chipRefs = useRef(new Map<string, HTMLAnchorElement>());
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  // Expose the chip bar's height as --section-nav-h, so sections scroll to
+  // just below the sticky header + chip bar instead of underneath them.
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    const update = () =>
+      document.documentElement.style.setProperty("--section-nav-h", `${nav.offsetHeight}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(nav);
+    return () => {
+      observer.disconnect();
+      document.documentElement.style.removeProperty("--section-nav-h");
+    };
+  }, [hasSectionNav]);
+
+  // Highlight the chip of the section currently at the top of the screen
+  // (the last one whose heading has scrolled up past the sticky bars).
+  useEffect(() => {
+    if (!hasSectionNav) return;
+    let frame = 0;
+    function update() {
+      frame = 0;
+      const offset = (navRef.current?.getBoundingClientRect().bottom ?? 0) + 24;
+      let current = sections[0]?.id ?? null;
+      for (const section of sections) {
+        const element = document.getElementById(`section-${section.id}`);
+        if (element && element.getBoundingClientRect().top <= offset) current = section.id;
+      }
+      setActiveId(current);
+    }
+    function onScroll() {
+      if (!frame) frame = requestAnimationFrame(update);
+    }
+    update();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, [hasSectionNav, sections]);
+
+  // Keep the highlighted chip visible in the sideways-scrolling bar.
+  useEffect(() => {
+    if (activeId) chipRefs.current.get(activeId)?.scrollIntoView({ block: "nearest", inline: "center" });
+  }, [activeId]);
 
   return (
     <div>
@@ -75,30 +123,31 @@ export function CategorySections({
       ) : (
         <>
           {hasSectionNav && (
-            <nav className="flex gap-3 overflow-x-auto pb-2 mb-5 -mx-4 px-4 sm:mx-0 sm:px-0">
+            // Pinned just below the shop header while scrolling the category.
+            <nav
+              ref={navRef}
+              className="sticky top-[var(--shop-header-h,0px)] z-[5] -mx-4 px-4 py-2.5 mb-4 bg-[#f7f5f1] flex gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
               {sections.map((section) => {
-                const Icon = getCategoryIcon(section.name);
-                const imageUrl = section.products.find((p) => p.imageUrl)?.imageUrl;
+                const active = section.id === activeId;
                 return (
                   <a
                     key={section.id}
+                    ref={(element) => {
+                      if (element) chipRefs.current.set(section.id, element);
+                      else chipRefs.current.delete(section.id);
+                    }}
                     href={`#section-${section.id}`}
-                    className="flex flex-col items-center gap-1.5 shrink-0 w-20"
+                    aria-current={active ? "true" : undefined}
+                    className={`shrink-0 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-[13px] font-semibold transition-colors ${
+                      active
+                        ? "bg-[var(--accent)] border-[var(--accent)] text-white"
+                        : "bg-white border-[#e6e0d6] text-[#4a443c]"
+                    }`}
                   >
-                    <span className="w-20 h-20 rounded-full border border-[#eae5dc] bg-white flex items-center justify-center overflow-hidden shadow-[0_2px_8px_-4px_rgba(0,0,0,0.15)]">
-                      {imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={optimizedImage(imageUrl, "SMALL")}
-                          alt=""
-                          className="w-full h-full object-contain p-2.5"
-                        />
-                      ) : (
-                        <Icon className="w-8 h-8 text-[var(--accent)]" />
-                      )}
-                    </span>
-                    <span className="text-xs font-medium text-[#4a443c] text-center leading-tight line-clamp-2 w-full">
-                      {section.name}
+                    {section.name}
+                    <span className={`ms-1.5 text-[11px] font-medium ${active ? "text-white/80" : "text-[#a39a8e]"}`}>
+                      {section.products.length}
                     </span>
                   </a>
                 );
@@ -123,7 +172,7 @@ export function CategorySections({
             <p className="text-sm text-[#8a8177] py-8 text-center">{t("catalog.noProductsMatchFilter")}</p>
           ) : (
             sections.map((section) => (
-              <section key={section.id} id={`section-${section.id}`} className="scroll-mt-[calc(var(--shop-header-h,0px)+1rem)] mb-10">
+              <section key={section.id} id={`section-${section.id}`} className="scroll-mt-[calc(var(--shop-header-h,0px)+var(--section-nav-h,0px)+0.75rem)] mb-10">
                 <div className="flex items-center gap-3 mb-4">
                   <h2 className="text-base font-bold text-[#1a1714] whitespace-nowrap">{section.name}</h2>
                   <div className="flex-1 h-px bg-[#eae5dc]" />
