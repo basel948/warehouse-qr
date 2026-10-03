@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { AdminNav } from "./admin-nav";
+import { IdleLogout } from "./idle-logout";
 
 export function AdminChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -11,6 +12,7 @@ export function AdminChrome({ children }: { children: React.ReactNode }) {
   return (
     <>
       {!isLoggedOutPage && <AdminNav />}
+      {!isLoggedOutPage && <IdleLogout />}
       {children}
     </>
   );

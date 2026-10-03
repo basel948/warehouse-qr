@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
+import { recordAdminActivity } from "../idle-logout";
 
 export default function AdminLoginPage() {
   const { t } = useLocale();
@@ -15,6 +16,12 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Set when IdleLogout sent the admin here after 2 hours of inactivity.
+  const [signedOutForIdle, setSignedOutForIdle] = useState(false);
+
+  useEffect(() => {
+    setSignedOutForIdle(new URLSearchParams(window.location.search).get("reason") === "idle");
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,6 +41,9 @@ export default function AdminLoginPage() {
       setError(t(res.error === "too_many_attempts" ? "admin.login.tooManyAttempts" : "admin.login.invalid"));
       return;
     }
+    // Start the inactivity timer fresh, or a timestamp left from an earlier
+    // session would sign the admin straight back out.
+    recordAdminActivity();
     router.push("/admin");
     router.refresh();
   }
@@ -47,6 +57,11 @@ export default function AdminLoginPage() {
         </div>
         <div className="bg-white border border-[#eae5dc] rounded-2xl p-[22px]">
           <h1 className="text-lg font-bold text-[#1a1714] mb-1">{t("admin.login.title")}</h1>
+          {signedOutForIdle && (
+            <p className="text-sm text-[#6b6259] bg-[#f7f5f1] border border-[#eae5dc] rounded-[10px] px-3 py-2 mt-3">
+              {t("admin.login.signedOutIdle")}
+            </p>
+          )}
           <form onSubmit={handleSubmit} className="space-y-2.5 mt-4">
             <input
               type="text"
