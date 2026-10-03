@@ -14,9 +14,9 @@ export function GET() {
       start_url: "/admin",
       scope: "/admin",
       display: "standalone",
-      background_color: "#FFFFFF",
-      theme_color: "#FFFFFF",
-      icons: [{ src: "/icon", sizes: "512x512", type: "image/png", purpose: "any" }],
+      background_color: "#111111",
+      theme_color: "#111111",
+      icons: [{ src: "/admin/icon", sizes: "512x512", type: "image/png", purpose: "any" }],
     },
     { headers: { "Content-Type": "application/manifest+json" } }
   );
