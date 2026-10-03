@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { PackageIcon } from "@/components/icons";
 import { optimizedImage } from "@/lib/image-url";
+import { shrinkImage } from "@/lib/shrink-image";
 
 type ErrorMessages = {
   notImage: string;
@@ -42,14 +43,17 @@ export function ImageUploadField({
     }
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0];
     e.target.value = "";
-    if (!file) return;
+    if (!picked) return;
 
     setErrorText(null);
     setProgress(0);
     setUploading(true);
+
+    // Phone photos are shrunk to 1600px before upload (see shrink-image.ts).
+    const file = await shrinkImage(picked);
 
     const formData = new FormData();
     formData.append("file", file);
