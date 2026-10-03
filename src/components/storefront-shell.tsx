@@ -23,6 +23,11 @@ import { getEffectivePrice } from "@/lib/effective-price";
 
 const CART_STORAGE_KEY = "warehouse-cart";
 
+// 12345.5 -> "12,345.50": thousands separators keep big totals readable.
+function formatPrice(amount: number): string {
+  return amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 type CartContextValue = {
   cart: Record<string, number>;
   addToCart: (productId: string) => void;
@@ -267,11 +272,13 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
           <div className="fixed bottom-0 inset-x-0 z-20 px-3.5 pt-4 pb-4 bg-gradient-to-t from-[#f7f5f1] from-[62%] to-transparent flex justify-center">
             <Link
               href="/cart"
-              className="w-1/2 min-w-[220px] bg-[var(--accent)] text-white rounded-full px-6 py-3.5 flex items-center justify-between font-bold text-base shadow-[0_10px_20px_-8px_rgba(0,0,0,0.45)]"
+              // Sized by its content (at least 220px, at most the screen width)
+              // so both ₪9.90 and ₪12,345.00 fit on one line.
+              className="min-w-[220px] max-w-full bg-[var(--accent)] text-white rounded-full px-6 py-3.5 flex items-center justify-between gap-6 font-bold text-base whitespace-nowrap shadow-[0_10px_20px_-8px_rgba(0,0,0,0.45)]"
             >
-              <span>₪{cartTotal.toFixed(2)}</span>
-              <span className="flex items-center gap-2">
-                {t("catalog.viewCart", { count: cartCount })}
+              <span className="tabular-nums" dir="ltr">₪{formatPrice(cartTotal)}</span>
+              <span className="flex items-center gap-2 shrink-0">
+                {t("catalog.viewCart")}
                 <svg
                   width="18"
                   height="18"

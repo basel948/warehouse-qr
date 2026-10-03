@@ -48,6 +48,10 @@ function PriceDisplay({ product, size = "sm" }: { product: Product; size?: "sm" 
   );
 }
 
+// The orders API accepts at most 10,000 of one product per order.
+const MAX_QUANTITY = 10000;
+const MAX_QUANTITY_DIGITS = String(MAX_QUANTITY).length;
+
 export function AddToCartControl({
   product,
   quantity,
@@ -70,7 +74,7 @@ export function AddToCartControl({
 
   function commitQuantityInput() {
     const parsed = parseInt(quantityInput, 10);
-    const clamped = Number.isNaN(parsed) ? 1 : Math.max(1, parsed);
+    const clamped = Number.isNaN(parsed) ? 1 : Math.min(MAX_QUANTITY, Math.max(1, parsed));
     onSetQuantity(clamped);
     setQuantityInput(String(clamped));
   }
@@ -131,7 +135,7 @@ export function AddToCartControl({
       className={`flex items-center justify-between rounded-[9px] p-[2px] ${
         size === "lg"
           ? "w-full bg-[#1a1714] text-white"
-          : "shrink-0 w-[104px] h-9 bg-white border border-[var(--accent)] text-[var(--accent)]"
+          : "shrink-0 min-w-[104px] h-9 bg-white border border-[var(--accent)] text-[var(--accent)]"
       }`}
     >
       <button
@@ -148,18 +152,20 @@ export function AddToCartControl({
         inputMode="numeric"
         pattern="[0-9]*"
         value={quantityInput}
-        onChange={(e) => setQuantityInput(e.target.value.replace(/[^0-9]/g, ""))}
+        onChange={(e) => setQuantityInput(e.target.value.replace(/[^0-9]/g, "").slice(0, MAX_QUANTITY_DIGITS))}
         onBlur={commitQuantityInput}
         onKeyDown={(e) => {
           if (e.key === "Enter") e.currentTarget.blur();
         }}
         aria-label="Quantity"
-        className={`min-w-0 bg-transparent text-center font-semibold outline-none ${
-          size === "lg" ? "w-12 text-base" : "w-7 text-[13px]"
+        // Widens with the number of digits, so 5 and 1250 both fit.
+        style={{ width: `${Math.max(size === "lg" ? 3 : 2, quantityInput.length) + 1}ch` }}
+        className={`min-w-0 bg-transparent text-center font-semibold outline-none tabular-nums ${
+          size === "lg" ? "text-base" : "text-[13px]"
         }`}
       />
       <button
-        onClick={() => onSetQuantity(quantity + 1)}
+        onClick={() => onSetQuantity(Math.min(MAX_QUANTITY, quantity + 1))}
         aria-label="Increase quantity"
         className={`shrink-0 font-bold leading-none ${
           size === "lg" ? "w-10 h-10 text-lg" : "w-7 h-full text-base"
@@ -267,18 +273,33 @@ export function ProductDetailModal({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
+  // Freeze the page behind the window so it can't scroll while open.
+  useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
   return (
+    // A centered window on every screen size, like checkout. The overlay
+    // covers the page, so nothing behind it can be tapped; tapping the
+    // overlay itself closes the window.
     <div
-      className="fixed inset-0 z-40 flex items-end sm:items-center sm:justify-center bg-[#1a1714]/55"
+      className="fixed inset-0 z-40 flex items-center justify-center p-4 bg-[#1a1714]/55"
       onClick={onClose}
     >
       <div
-        className="w-full sm:max-w-md bg-white rounded-t-[22px] sm:rounded-2xl max-h-[90vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-label={product.name}
+        className="w-full max-w-md bg-white rounded-2xl max-h-[90dvh] overflow-y-auto overscroll-contain shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative">
           <div
-            className={`aspect-square flex items-center justify-center overflow-hidden p-6 sm:rounded-t-2xl ${
+            className={`aspect-square max-h-[45dvh] w-full flex items-center justify-center overflow-hidden p-6 rounded-t-2xl ${
               product.imageUrl ? "bg-white" : "bg-[#f2efe9]"
             }`}
           >
