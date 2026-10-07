@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 import { type Product } from "@/components/catalog-ui";
 import { getEffectivePrice } from "@/lib/effective-price";
 
-export type SortMode = "name-asc" | "name-desc" | "price-asc" | "price-desc";
+// "featured" keeps the order the products arrive in, which is the admin's
+// arrangement (Product.sortOrder) on category pages.
+export type SortMode = "featured" | "name-asc" | "name-desc" | "price-asc" | "price-desc";
 
 function startsWithLatinOrDigit(name: string): boolean {
   return /^[A-Za-z0-9]/.test(name.trim());
@@ -19,6 +21,8 @@ function compareProductNames(a: Product, b: Product): number {
 
 function makeComparator(sortMode: SortMode): (a: Product, b: Product) => number {
   switch (sortMode) {
+    case "featured":
+      return () => 0;
     case "name-desc":
       return (a, b) => -compareProductNames(a, b);
     case "price-asc":
@@ -32,7 +36,7 @@ function makeComparator(sortMode: SortMode): (a: Product, b: Product) => number 
 }
 
 export function useProductFilters(products: Product[]) {
-  const [sortMode, setSortMode] = useState<SortMode>("name-asc");
+  const [sortMode, setSortMode] = useState<SortMode>("featured");
   const [priceMin, setPriceMin] = useState("");
   const [priceMax, setPriceMax] = useState("");
   const [inStockOnly, setInStockOnly] = useState(false);

@@ -23,7 +23,8 @@ export default async function CategoryPage({
 
   const products = await prisma.product.findMany({
     where: { categories: { some: { id: category.id } } },
-    orderBy: { name: "asc" },
+    // The admin's arrangement ("arrange products"); name breaks ties.
+    orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
     include: { categories: true, subcategory: true },
   });
 

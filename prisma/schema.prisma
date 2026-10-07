@@ -64,6 +64,9 @@ model Product {
   imageUrl      String?
   inStock       Boolean      @default(true)
   onSale        Boolean      @default(false)
+  // Position chosen by the admin ("arrange products"); category pages list
+  // products by it. Lower = earlier. New products go to the end.
+  sortOrder     Int          @default(0)
   salePrice     Float?
   saleBannerImageUrl String?
   categories    Category[]

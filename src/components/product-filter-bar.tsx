@@ -74,6 +74,7 @@ export function ProductFilterBar({
         aria-label={t("catalog.sortLabel")}
         className="border border-[#e6e0d6] rounded-xl px-2.5 py-2 text-sm bg-white text-[#4a443c]"
       >
+        <option value="featured">{t("catalog.sortFeatured")}</option>
         <option value="name-asc">{t("catalog.sortNameAsc")}</option>
         <option value="name-desc">{t("catalog.sortNameDesc")}</option>
         <option value="price-asc">{t("catalog.sortPriceAsc")}</option>

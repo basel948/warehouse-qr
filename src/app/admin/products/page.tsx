@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ImageUploadField } from "@/components/image-upload-field";
+import { ActionsMenu } from "./actions-menu";
 import { CategoryList } from "./category-list";
+import { ProductOrderSection } from "./product-order-list";
 import { ChevronDownIcon, DuplicateIcon, EditIcon, PackageIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -30,6 +32,7 @@ type Product = {
   price: number;
   imageUrl: string | null;
   inStock: boolean;
+  sortOrder: number;
   onSale: boolean;
   salePrice: number | null;
   saleBannerImageUrl: string | null;
@@ -140,6 +143,8 @@ export default function AdminProductsPage() {
   const [addOpen, setAddOpen] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editCategoryIds, setEditCategoryIds] = useState<string[]>([]);
+  const [editSubcategoryId, setEditSubcategoryId] = useState("");
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editPrice, setEditPrice] = useState("");
@@ -389,6 +394,8 @@ export default function AdminProductsPage() {
     setEditSalePrice(product.salePrice != null ? String(product.salePrice) : "");
     setEditSalePercent("");
     setEditSaleBannerImageUrl(product.saleBannerImageUrl ?? "");
+    setEditCategoryIds(product.categories.map((category) => category.id));
+    setEditSubcategoryId(product.subcategoryId ?? "");
     setEditError(null);
   }
 
@@ -450,6 +457,13 @@ export default function AdminProductsPage() {
         onSale: editOnSale,
         salePrice: editOnSale ? parsedSalePrice : null,
         saleBannerImageUrl: editOnSale ? editSaleBannerImageUrl || null : null,
+        categoryIds: editCategoryIds,
+        // A subcategory only makes sense under one of the product's categories.
+        subcategoryId: subcategories.some(
+          (s) => s.id === editSubcategoryId && editCategoryIds.includes(s.categoryId)
+        )
+          ? editSubcategoryId
+          : null,
       }),
     });
 
@@ -463,33 +477,6 @@ export default function AdminProductsPage() {
     setBusy(null);
     setEditingId(null);
     toast(t("admin.products.toastSaved"));
-  }
-
-  async function setProductCategories(product: Product, newCategoryIds: string[]) {
-    // A subcategory only makes sense under the category it was created for,
-    // so drop it if it no longer belongs to any of the product's categories.
-    const subcategoryStillValid = subcategories.some(
-      (subcategory) =>
-        subcategory.id === product.subcategoryId && newCategoryIds.includes(subcategory.categoryId)
-    );
-    await fetch(`/api/products/${product.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        categoryIds: newCategoryIds,
-        ...(subcategoryStillValid ? {} : { subcategoryId: null }),
-      }),
-    });
-    loadAll();
-  }
-
-  async function setProductSubcategory(product: Product, newSubcategoryId: string) {
-    await fetch(`/api/products/${product.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subcategoryId: newSubcategoryId || null }),
-    });
-    loadAll();
   }
 
   // Runs a one-click product action with a spinner on its button, then a
@@ -585,9 +572,17 @@ export default function AdminProductsPage() {
     );
   }
 
-  function actionIcon(product: Product, action: ProductAction, icon: React.ReactNode) {
-    return busy?.id === product.id && busy.action === action ? <Spinner /> : icon;
-  }
+  const editingProduct = products.find((product) => product.id === editingId) ?? null;
+
+  // Freeze the page behind the edit window while it's open.
+  useEffect(() => {
+    if (!editingId) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [editingId]);
 
   const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
@@ -713,6 +708,13 @@ export default function AdminProductsPage() {
         )}
       </div>
 
+      <ProductOrderSection
+        categories={categories}
+        subcategories={subcategories}
+        products={products}
+        onSaved={() => loadAll({ quiet: true })}
+      />
+
       <div>
         <h1 className="text-xl font-bold text-[#1a1714] mb-4">
           {t("admin.products.productsTitle")}
@@ -830,321 +832,326 @@ export default function AdminProductsPage() {
             {t("admin.products.noProductsMatch", { query: searchQuery })}
           </p>
         ) : (
-          <div className="bg-white border border-[#eae5dc] rounded-[14px] overflow-hidden">
-            <div className="hidden sm:grid grid-cols-[1fr_140px_140px_100px_150px] gap-4 px-[18px] py-[11px] bg-[#faf8f5] border-b border-[#eae5dc] text-xs font-semibold text-[#8a8177]">
-              <span>{t("admin.products.colProduct")}</span>
-              <span>{t("admin.products.colCategory")}</span>
-              <span>{t("admin.products.colSubcategory")}</span>
-              <span>{t("admin.products.colPrice")}</span>
-              <span />
-            </div>
-            <ul className="divide-y divide-[#f2efe9]">
-              {filteredProducts.map((product) =>
-                editingId === product.id ? (
-                  <li key={product.id} className="p-[18px] bg-[#fdfaf4]">
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        saveEdit(product.id);
-                      }}
-                      className="space-y-2"
-                    >
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          placeholder={t("admin.products.namePlaceholder")}
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          className="flex-1 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
-                        />
-                        <input
-                          type="number"
-                          step="0.01"
-                          placeholder={t("admin.products.pricePlaceholder")}
-                          value={editPrice}
-                          onChange={(e) => setEditPrice(e.target.value)}
-                          className="w-24 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
-                        />
-                      </div>
-                      <input
-                        type="text"
-                        placeholder={t("admin.products.descriptionPlaceholder")}
-                        value={editDescription}
-                        onChange={(e) => setEditDescription(e.target.value)}
-                        className="w-full border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {filteredProducts.map((product) => {
+              const subcategory = subcategories.find((s) => s.id === product.subcategoryId);
+              return (
+                <li
+                  key={product.id}
+                  className="bg-white border border-[#eae5dc] rounded-[14px] overflow-hidden flex flex-col"
+                >
+                  <div className="relative h-44 bg-white flex items-center justify-center border-b border-[#f2efe9]">
+                    {product.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={optimizedImage(product.imageUrl, "CARD")}
+                        alt=""
+                        className={`w-full h-full object-contain p-3 ${product.inStock ? "" : "opacity-50"}`}
                       />
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <label className="flex items-center gap-1.5 text-sm text-[#4a443c]">
-                          <input
-                            type="checkbox"
-                            checked={editOnSale}
-                            onChange={(e) => setEditOnSale(e.target.checked)}
-                          />
-                          {t("admin.products.onSaleLabel")}
-                        </label>
-                        {editOnSale && (
-                          <>
-                            <div className="flex rounded-[9px] border border-[#e6e0d6] overflow-hidden text-sm">
-                              <button
-                                type="button"
-                                onClick={() => setEditSaleMode("amount")}
-                                className={`px-2.5 py-2 ${
-                                  editSaleMode === "amount" ? "bg-[#1a1714] text-white" : "bg-white text-[#4a443c]"
-                                }`}
-                              >
-                                {t("admin.products.salePriceModeAmount")}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setEditSaleMode("percent")}
-                                className={`px-2.5 py-2 ${
-                                  editSaleMode === "percent" ? "bg-[#1a1714] text-white" : "bg-white text-[#4a443c]"
-                                }`}
-                              >
-                                {t("admin.products.salePriceModePercent")}
-                              </button>
-                            </div>
-                            {editSaleMode === "amount" ? (
-                              <input
-                                type="number"
-                                step="0.01"
-                                placeholder={t("admin.products.salePricePlaceholder")}
-                                value={editSalePrice}
-                                onChange={(e) => setEditSalePrice(e.target.value)}
-                                className="w-28 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
-                              />
-                            ) : (
-                              <input
-                                type="number"
-                                step="1"
-                                placeholder={t("admin.products.salePercentPlaceholder")}
-                                value={editSalePercent}
-                                onChange={(e) => setEditSalePercent(e.target.value)}
-                                className="w-24 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
-                              />
-                            )}
-                          </>
-                        )}
-                      </div>
-                      {editOnSale &&
-                        editSaleMode === "percent" &&
-                        (() => {
-                          const priceNum = Number(editPrice);
-                          const percentNum = Number(editSalePercent);
-                          if (
-                            !Number.isFinite(priceNum) ||
-                            priceNum <= 0 ||
-                            !Number.isFinite(percentNum) ||
-                            percentNum <= 0 ||
-                            percentNum >= 100
-                          ) {
-                            return null;
-                          }
-                          const preview = Math.round(priceNum * (1 - percentNum / 100) * 100) / 100;
-                          return (
-                            <p className="text-xs text-[#8a8177]">
-                              {t("admin.products.salePricePreview", { amount: preview.toFixed(2) })}
-                            </p>
-                          );
-                        })()}
-                      {editOnSale && (
-                        <div>
-                          <p className="text-xs text-[#8a8177] mb-1.5">
-                            {t("admin.products.saleBannerLabel")}
-                          </p>
-                          <ImageUploadField
-                            value={editSaleBannerImageUrl}
-                            onChange={setEditSaleBannerImageUrl}
-                            uploadLabel={t("admin.products.uploadImage")}
-                            uploadingLabel={t("admin.products.uploading")}
-                            hintText={t("admin.products.saleBannerHint")}
-                            errorMessages={{
-                              notImage: t("admin.products.uploadErrorNotImage"),
-                              tooLarge: t("admin.products.uploadErrorTooLarge"),
-                              network: t("admin.products.uploadErrorNetwork"),
-                              generic: t("admin.products.uploadErrorGeneric"),
-                            }}
-                          />
-                        </div>
-                      )}
-                      <ImageUploadField
-                        value={editImageUrl}
-                        onChange={setEditImageUrl}
-                        uploadLabel={t("admin.products.uploadImage")}
-                        uploadingLabel={t("admin.products.uploading")}
-                        hintText={t("admin.products.uploadHint")}
-                        errorMessages={{
-                          notImage: t("admin.products.uploadErrorNotImage"),
-                          tooLarge: t("admin.products.uploadErrorTooLarge"),
-                          network: t("admin.products.uploadErrorNetwork"),
-                          generic: t("admin.products.uploadErrorGeneric"),
-                        }}
+                    ) : (
+                      <PackageIcon className="w-10 h-10 text-[#c5bdb1]" />
+                    )}
+                    <div className="absolute top-2.5 end-2.5">
+                      <ActionsMenu
+                        label={t("admin.products.actionsMenu", { name: product.name })}
+                        disabled={busy?.id === product.id}
+                        busyIcon={busy?.id === product.id ? <Spinner /> : undefined}
+                        items={[
+                          {
+                            label: t("admin.products.edit"),
+                            icon: <EditIcon className="w-4 h-4" />,
+                            onClick: () => startEdit(product),
+                          },
+                          {
+                            label: product.inStock ? t("admin.products.markOutOfStock") : t("admin.products.markInStock"),
+                            icon: <PackageIcon className="w-4 h-4" />,
+                            onClick: () => toggleStock(product),
+                          },
+                          {
+                            label: product.onSale ? t("admin.products.removeFromSale") : t("admin.products.markOnSale"),
+                            icon: <span className="text-sm font-bold">%</span>,
+                            onClick: () => toggleSale(product),
+                          },
+                          {
+                            label: t("admin.products.duplicate"),
+                            icon: <DuplicateIcon className="w-4 h-4" />,
+                            onClick: () => duplicateProduct(product),
+                          },
+                          {
+                            label: t("admin.products.delete"),
+                            icon: <TrashIcon className="w-4 h-4" />,
+                            onClick: () => deleteProduct(product),
+                            danger: true,
+                          },
+                        ]}
                       />
-                      <div className="flex gap-3">
-                        <button
-                          type="submit"
-                          disabled={busy?.id === product.id}
-                          className="inline-flex items-center gap-2 bg-[#1a1714] text-white text-sm font-semibold rounded-[9px] px-3.5 py-2 disabled:opacity-70"
-                        >
-                          {busy?.id === product.id && busy.action === "save" && <Spinner />}
-                          {t("admin.products.save")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={cancelEdit}
-                          className="text-sm text-[#6b6259]"
-                        >
-                          {t("admin.products.cancel")}
-                        </button>
-                      </div>
-                      {editError && <p className="text-sm text-[#b3402e]">{editError}</p>}
-                    </form>
-                  </li>
-                ) : (
-                  <li
-                    key={product.id}
-                    className="grid grid-cols-1 sm:grid-cols-[1fr_140px_140px_100px_150px] gap-2 sm:gap-4 items-center px-[18px] py-3.5 text-sm"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      {product.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={optimizedImage(product.imageUrl, "THUMB")}
-                          alt=""
-                          className="w-[38px] h-[38px] object-cover rounded-[9px] border border-[#eae5dc] shrink-0"
-                        />
-                      ) : (
-                        <div
-                          className="w-[38px] h-[38px] shrink-0 rounded-[9px] bg-[#f2efe9] flex items-center justify-center text-[#c5bdb1]"
-                          aria-hidden
-                        >
-                          <PackageIcon className="w-4 h-4" />
-                        </div>
-                      )}
-                      <span className="text-[#1a1714] truncate">{product.name}</span>
                     </div>
-                    <CategoryMultiSelect
-                      categories={categories}
-                      selectedIds={product.categories.map((category) => category.id)}
-                      onChange={(ids) => setProductCategories(product, ids)}
-                      placeholder={t("admin.products.noCategoryOption")}
-                    />
-                    <select
-                      value={product.subcategoryId ?? ""}
-                      onChange={(e) => setProductSubcategory(product, e.target.value)}
-                      disabled={product.categories.length === 0}
-                      className="border border-[#e6e0d6] rounded-[9px] px-2.5 py-1.5 text-sm bg-white disabled:opacity-50"
-                    >
-                      <option value="">{t("admin.products.noSubcategoryOption")}</option>
-                      {subcategories
-                        .filter((s) => product.categories.some((category) => category.id === s.categoryId))
-                        .map((subcategory) => (
-                          <option key={subcategory.id} value={subcategory.id}>
-                            {subcategory.name}
-                          </option>
-                        ))}
-                    </select>
-                    <span className="flex flex-col leading-tight">
-                      {product.onSale && product.salePrice != null ? (
-                        <>
-                          <span className="text-[#b3402e] font-semibold">
-                            ₪{product.salePrice.toFixed(2)}
-                          </span>
-                          <span className="text-[#a39a8e] text-xs line-through">
-                            ₪{product.price.toFixed(2)}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-[#1a1714] font-semibold">₪{product.price.toFixed(2)}</span>
-                      )}
-                    </span>
-                    <div className="flex items-center gap-2.5 flex-wrap">
+                    <div className="absolute top-2.5 start-2.5 flex flex-col items-start gap-1">
                       <span
                         className={`text-xs font-semibold rounded-full px-2.5 py-1 ${
-                          product.inStock
-                            ? "bg-[#f1f7f1] text-[#2f6b3a]"
-                            : "bg-[#f2efe9] text-[#6b6259]"
+                          product.inStock ? "bg-[#f1f7f1] text-[#2f6b3a]" : "bg-[#f2efe9] text-[#6b6259]"
                         }`}
                       >
-                        {product.inStock
-                          ? t("admin.products.inStockLabel")
-                          : t("admin.products.outOfStockLabel")}
+                        {product.inStock ? t("admin.products.inStockLabel") : t("admin.products.outOfStockLabel")}
                       </span>
-                      <button
-                        onClick={() => toggleStock(product)}
-                        disabled={busy?.id === product.id}
-                        title={
-                          product.inStock
-                            ? t("admin.products.markOutOfStock")
-                            : t("admin.products.markInStock")
-                        }
-                        aria-label={
-                          product.inStock
-                            ? t("admin.products.markOutOfStock")
-                            : t("admin.products.markInStock")
-                        }
-                        className={`w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] ${
-                          product.inStock ? "text-[#2f6b3a]" : "text-[#8a8177]"
-                        }`}
-                      >
-                        {actionIcon(product, "stock", <PackageIcon className="w-4 h-4" />)}
-                      </button>
-                      <button
-                        onClick={() => toggleSale(product)}
-                        disabled={busy?.id === product.id}
-                        title={
-                          product.onSale
-                            ? t("admin.products.removeFromSale")
-                            : t("admin.products.markOnSale")
-                        }
-                        aria-label={
-                          product.onSale
-                            ? t("admin.products.removeFromSale")
-                            : t("admin.products.markOnSale")
-                        }
-                        className={`w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border text-sm font-bold ${
-                          product.onSale
-                            ? "border-[var(--accent)] text-[var(--accent)]"
-                            : "border-[#e6e0d6] text-[#8a8177]"
-                        }`}
-                      >
-                        {actionIcon(product, "sale", "%")}
-                      </button>
-                      <button
-                        onClick={() => startEdit(product)}
-                        disabled={busy?.id === product.id}
-                        title={t("admin.products.edit")}
-                        aria-label={t("admin.products.edit")}
-                        className="w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] text-[#6b6259]"
-                      >
-                        <EditIcon className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => duplicateProduct(product)}
-                        disabled={busy?.id === product.id}
-                        title={t("admin.products.duplicate")}
-                        aria-label={t("admin.products.duplicate")}
-                        className="w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] text-[#6b6259]"
-                      >
-                        {actionIcon(product, "duplicate", <DuplicateIcon className="w-4 h-4" />)}
-                      </button>
-                      <button
-                        onClick={() => deleteProduct(product)}
-                        disabled={busy?.id === product.id}
-                        title={t("admin.products.delete")}
-                        aria-label={t("admin.products.delete")}
-                        className="w-8 h-8 flex items-center justify-center rounded-[8px] disabled:opacity-60 border border-[#e6e0d6] text-[#b3402e]"
-                      >
-                        {actionIcon(product, "delete", <TrashIcon className="w-4 h-4" />)}
-                      </button>
+                      {product.onSale && (
+                        <span className="text-xs font-semibold rounded-full px-2.5 py-1 bg-[var(--accent)] text-white">
+                          {t("admin.products.onSaleLabel")}
+                        </span>
+                      )}
                     </div>
-                  </li>
-                )
-              )}
-            </ul>
-          </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => startEdit(product)}
+                    className="flex-1 flex flex-col gap-1.5 p-3.5 text-start"
+                  >
+                    <span className="text-[15px] font-semibold text-[#1a1714] leading-snug line-clamp-2">
+                      {product.name}
+                    </span>
+                    <span className="flex items-baseline gap-2">
+                      {product.onSale && product.salePrice != null ? (
+                        <>
+                          <span className="text-base font-bold text-[#b3402e]">₪{product.salePrice.toFixed(2)}</span>
+                          <span className="text-xs text-[#a39a8e] line-through">₪{product.price.toFixed(2)}</span>
+                        </>
+                      ) : (
+                        <span className="text-base font-bold text-[#1a1714]">₪{product.price.toFixed(2)}</span>
+                      )}
+                    </span>
+                    <span className="text-xs text-[#8a8177] line-clamp-1">
+                      {product.categories.length > 0
+                        ? product.categories.map((category) => category.name).join(", ")
+                        : t("admin.products.noCategoryOption")}
+                      {subcategory ? ` · ${subcategory.name}` : ""}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
+
+      {editingProduct && (
+        // Centered edit window; the page behind can't be tapped or scrolled.
+        // !mt-0: the page's space-y gap would otherwise push the overlay down.
+        <div className="fixed inset-0 !mt-0 z-40 flex items-center justify-center p-4 bg-[#1a1714]/55">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("admin.products.editTitle", { name: editingProduct.name })}
+            className="w-full max-w-lg bg-white rounded-2xl max-h-[90dvh] overflow-y-auto overscroll-contain shadow-xl"
+          >
+            <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3 border-b border-[#f2efe9]">
+              <h2 className="text-base font-bold text-[#1a1714] truncate">
+                {t("admin.products.editTitle", { name: editingProduct.name })}
+              </h2>
+              <button
+                type="button"
+                onClick={cancelEdit}
+                aria-label={t("admin.products.cancel")}
+                className="w-8 h-8 shrink-0 rounded-full bg-[#f2efe9] text-[#6b6259] flex items-center justify-center"
+              >
+                ×
+              </button>
+            </div>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                saveEdit(editingProduct.id);
+              }}
+              className="space-y-2.5 p-5"
+            >
+              <div className="flex gap-2">
+                <label className="flex-1">
+                  <span className="block text-xs font-semibold text-[#6b6259] mb-1">{t("admin.products.namePlaceholder")}</span>
+                <input
+                  type="text"
+                  placeholder={t("admin.products.namePlaceholder")}
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+                />
+                </label>
+                <label className="w-24">
+                  <span className="block text-xs font-semibold text-[#6b6259] mb-1">{t("admin.products.pricePlaceholder")}</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder={t("admin.products.pricePlaceholder")}
+                  value={editPrice}
+                  onChange={(e) => setEditPrice(e.target.value)}
+                  className="w-full border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+                />
+                </label>
+              </div>
+              <span className="block text-xs font-semibold text-[#6b6259] mb-1">{t("admin.products.descriptionPlaceholder")}</span>
+              <input
+                type="text"
+                placeholder={t("admin.products.descriptionPlaceholder")}
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                className="w-full border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+              />
+              <div className="flex items-center gap-2 flex-wrap">
+                <label className="flex items-center gap-1.5 text-sm text-[#4a443c]">
+                  <input
+                    type="checkbox"
+                    checked={editOnSale}
+                    onChange={(e) => setEditOnSale(e.target.checked)}
+                  />
+                  {t("admin.products.onSaleLabel")}
+                </label>
+                {editOnSale && (
+                  <>
+                    <div className="flex rounded-[9px] border border-[#e6e0d6] overflow-hidden text-sm">
+                      <button
+                        type="button"
+                        onClick={() => setEditSaleMode("amount")}
+                        className={`px-2.5 py-2 ${
+                          editSaleMode === "amount" ? "bg-[#1a1714] text-white" : "bg-white text-[#4a443c]"
+                        }`}
+                      >
+                        {t("admin.products.salePriceModeAmount")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditSaleMode("percent")}
+                        className={`px-2.5 py-2 ${
+                          editSaleMode === "percent" ? "bg-[#1a1714] text-white" : "bg-white text-[#4a443c]"
+                        }`}
+                      >
+                        {t("admin.products.salePriceModePercent")}
+                      </button>
+                    </div>
+                    {editSaleMode === "amount" ? (
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder={t("admin.products.salePricePlaceholder")}
+                        value={editSalePrice}
+                        onChange={(e) => setEditSalePrice(e.target.value)}
+                        className="w-28 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+                      />
+                    ) : (
+                      <input
+                        type="number"
+                        step="1"
+                        placeholder={t("admin.products.salePercentPlaceholder")}
+                        value={editSalePercent}
+                        onChange={(e) => setEditSalePercent(e.target.value)}
+                        className="w-24 border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+                      />
+                    )}
+                  </>
+                )}
+              </div>
+              {editOnSale &&
+                editSaleMode === "percent" &&
+                (() => {
+                  const priceNum = Number(editPrice);
+                  const percentNum = Number(editSalePercent);
+                  if (
+                    !Number.isFinite(priceNum) ||
+                    priceNum <= 0 ||
+                    !Number.isFinite(percentNum) ||
+                    percentNum <= 0 ||
+                    percentNum >= 100
+                  ) {
+                    return null;
+                  }
+                  const preview = Math.round(priceNum * (1 - percentNum / 100) * 100) / 100;
+                  return (
+                    <p className="text-xs text-[#8a8177]">
+                      {t("admin.products.salePricePreview", { amount: preview.toFixed(2) })}
+                    </p>
+                  );
+                })()}
+              {editOnSale && (
+                <div>
+                  <p className="text-xs text-[#8a8177] mb-1.5">
+                    {t("admin.products.saleBannerLabel")}
+                  </p>
+                  <ImageUploadField
+                    value={editSaleBannerImageUrl}
+                    onChange={setEditSaleBannerImageUrl}
+                    uploadLabel={t("admin.products.uploadImage")}
+                    uploadingLabel={t("admin.products.uploading")}
+                    hintText={t("admin.products.saleBannerHint")}
+                    errorMessages={{
+                      notImage: t("admin.products.uploadErrorNotImage"),
+                      tooLarge: t("admin.products.uploadErrorTooLarge"),
+                      network: t("admin.products.uploadErrorNetwork"),
+                      generic: t("admin.products.uploadErrorGeneric"),
+                    }}
+                  />
+                </div>
+              )}
+              <ImageUploadField
+                value={editImageUrl}
+                onChange={setEditImageUrl}
+                uploadLabel={t("admin.products.uploadImage")}
+                uploadingLabel={t("admin.products.uploading")}
+                hintText={t("admin.products.uploadHint")}
+                errorMessages={{
+                  notImage: t("admin.products.uploadErrorNotImage"),
+                  tooLarge: t("admin.products.uploadErrorTooLarge"),
+                  network: t("admin.products.uploadErrorNetwork"),
+                  generic: t("admin.products.uploadErrorGeneric"),
+                }}
+              />
+              <span className="block text-xs font-semibold text-[#6b6259] mb-1">{t("admin.products.colCategory")}</span>
+              <CategoryMultiSelect
+                categories={categories}
+                selectedIds={editCategoryIds}
+                onChange={(ids) => {
+                  setEditCategoryIds(ids);
+                  if (!subcategories.some((s) => s.id === editSubcategoryId && ids.includes(s.categoryId))) {
+                    setEditSubcategoryId("");
+                  }
+                }}
+                placeholder={t("admin.products.noCategoryOption")}
+              />
+              {subcategories.some((s) => editCategoryIds.includes(s.categoryId)) && (
+                <select
+                  value={editSubcategoryId}
+                  onChange={(e) => setEditSubcategoryId(e.target.value)}
+                  className="w-full border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+                >
+                  <option value="">{t("admin.products.noSubcategoryOption")}</option>
+                  {subcategories
+                    .filter((s) => editCategoryIds.includes(s.categoryId))
+                    .map((subcategory) => (
+                      <option key={subcategory.id} value={subcategory.id}>
+                        {subcategory.name}
+                      </option>
+                    ))}
+                </select>
+              )}
+              {editError && <p className="text-sm text-[#b3402e]">{editError}</p>}
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  className="flex-1 h-11 rounded-[10px] border border-[#e6e0d6] text-[#1a1714] text-sm font-semibold"
+                >
+                  {t("admin.products.cancel")}
+                </button>
+                <button
+                  type="submit"
+                  disabled={busy?.id === editingProduct.id}
+                  className="flex-1 h-11 inline-flex items-center justify-center gap-2 rounded-[10px] bg-[var(--accent)] text-white text-sm font-semibold disabled:opacity-70"
+                >
+                  {busy?.id === editingProduct.id && busy.action === "save" && <Spinner />}
+                  {t("admin.products.save")}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

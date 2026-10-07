@@ -43,9 +43,13 @@ export async function POST(request: Request) {
 
   const { categoryIds, ...rest } = parsed.data;
 
+  // New products go to the end of the admin's ordering.
+  const last = await prisma.product.aggregate({ _max: { sortOrder: true } });
+
   const product = await prisma.product.create({
     data: {
       ...rest,
+      sortOrder: (last._max.sortOrder ?? 0) + 10,
       categories: categoryIds ? { connect: categoryIds.map((id) => ({ id })) } : undefined,
     },
     include: { categories: true, subcategory: true },
