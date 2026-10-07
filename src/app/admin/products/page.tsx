@@ -5,6 +5,7 @@ import { ImageUploadField } from "@/components/image-upload-field";
 import { ActionsMenu } from "./actions-menu";
 import { CategoryList } from "./category-list";
 import { ProductOrderSection } from "./product-order-list";
+import { SubcategoryList } from "./subcategory-list";
 import { ChevronDownIcon, DuplicateIcon, EditIcon, PackageIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -296,6 +297,30 @@ export default function AdminProductsPage() {
 
     setNewSubcategoryName("");
     loadAll();
+  }
+
+  // Saves a new subcategory order after a drag (within the chosen category):
+  // renumbers them 0..n and only sends the ones whose position changed. The
+  // shop shows a category's subcategory chips and sections in this order.
+  async function saveSubcategoryOrder(reordered: Subcategory[]) {
+    const changed = reordered.filter((subcategory, position) => subcategory.order !== position);
+    const positions = new Map(reordered.map((subcategory, position) => [subcategory.id, position]));
+    setSubcategories((current) =>
+      current
+        .map((subcategory) =>
+          positions.has(subcategory.id) ? { ...subcategory, order: positions.get(subcategory.id)! } : subcategory
+        )
+        .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, "he"))
+    );
+    await Promise.all(
+      changed.map((subcategory) =>
+        fetch(`/api/subcategories/${subcategory.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ order: positions.get(subcategory.id) }),
+        })
+      )
+    );
   }
 
   async function deleteSubcategory(id: string) {
@@ -687,23 +712,17 @@ export default function AdminProductsPage() {
             </form>
             {subcategoryError && <p className="text-sm text-[#b3402e] mb-3">{subcategoryError}</p>}
 
-            <ul className="flex flex-wrap gap-2">
-              {subcategoriesForManager.map((subcategory) => (
-                <li
-                  key={subcategory.id}
-                  className="flex items-center gap-2 border border-[#e6e0d6] bg-white rounded-full ps-3.5 pe-1.5 py-1.5 text-[13px]"
-                >
-                  {subcategory.name}
-                  <button
-                    onClick={() => deleteSubcategory(subcategory.id)}
-                    aria-label={t("admin.products.deleteCategoryAria", { name: subcategory.name })}
-                    className="text-[#a39a8e] hover:text-[#b3402e] rounded-full w-5 h-5 leading-none"
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <SubcategoryList
+              subcategories={subcategoriesForManager}
+              productCounts={Object.fromEntries(
+                subcategoriesForManager.map((subcategory) => [
+                  subcategory.id,
+                  products.filter((product) => product.subcategoryId === subcategory.id).length,
+                ])
+              )}
+              onReorder={saveSubcategoryOrder}
+              onDelete={deleteSubcategory}
+            />
           </>
         )}
       </div>

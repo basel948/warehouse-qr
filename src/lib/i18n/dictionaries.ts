@@ -180,6 +180,8 @@ export const dictionaries = {
         print: "הדפסה",
       },
       products: {
+        dragSubcategoryAria: "גרירה לשינוי מיקום: {name}",
+        subcategoryProductCount: "{count} מוצרים",
         bulkSelectAll: "בחירת הכל ({count})",
         bulkSelectOne: "בחירת {name}",
         bulkSelected: "{count} נבחרו",
@@ -507,6 +509,8 @@ export const dictionaries = {
         print: "طباعة",
       },
       products: {
+        dragSubcategoryAria: "اسحب لتغيير موضع: {name}",
+        subcategoryProductCount: "{count} منتجات",
         bulkSelectAll: "تحديد الكل ({count})",
         bulkSelectOne: "تحديد {name}",
         bulkSelected: "تم تحديد {count}",
