@@ -142,6 +142,7 @@ export default function AdminProductsPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [subcatsOpen, setSubcatsOpen] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editCategoryIds, setEditCategoryIds] = useState<string[]>([]);
@@ -675,55 +676,70 @@ export default function AdminProductsPage() {
         />
       </div>
 
-      <div>
-        <h1 className="text-xl font-bold text-[#1a1714] mb-4">
-          {t("admin.products.subcategoriesTitle")}
-        </h1>
-
-        <select
-          value={subcatManagerCategoryId}
-          onChange={(e) => setSubcatManagerCategoryId(e.target.value)}
-          className="border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5 mb-3 w-full sm:w-auto"
+      {/* Collapsed by default; the header opens it. */}
+      <div className="bg-white border border-[#eae5dc] rounded-[14px]">
+        <button
+          type="button"
+          onClick={() => setSubcatsOpen((open) => !open)}
+          aria-expanded={subcatsOpen}
+          className="w-full flex items-center justify-between gap-3 px-[18px] py-3.5 text-start"
         >
-          <option value="">{t("admin.products.subcategoryManagerPlaceholder")}</option>
-          {categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
+          <span>
+            <span className="block text-base font-bold text-[#1a1714]">{t("admin.products.subcategoriesTitle")}</span>
+            <span className="block text-[13px] text-[#8a8177]">{t("admin.products.subcategoriesHint")}</span>
+          </span>
+          <ChevronDownIcon
+            className={`w-5 h-5 shrink-0 text-[#6b6259] transition-transform ${subcatsOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        {subcatsOpen && (
+          <div className="px-[18px] pb-[18px]">
+          <select
+            value={subcatManagerCategoryId}
+            onChange={(e) => setSubcatManagerCategoryId(e.target.value)}
+            className="border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5 mb-3 w-full sm:w-auto"
+          >
+            <option value="">{t("admin.products.subcategoryManagerPlaceholder")}</option>
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
 
-        {subcatManagerCategoryId && (
-          <>
-            <form onSubmit={addSubcategory} className="flex gap-2 mb-3">
-              <input
-                type="text"
-                placeholder={t("admin.products.newSubcategoryPlaceholder")}
-                value={newSubcategoryName}
-                onChange={(e) => setNewSubcategoryName(e.target.value)}
-                className="flex-1 border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5"
+          {subcatManagerCategoryId && (
+            <>
+              <form onSubmit={addSubcategory} className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  placeholder={t("admin.products.newSubcategoryPlaceholder")}
+                  value={newSubcategoryName}
+                  onChange={(e) => setNewSubcategoryName(e.target.value)}
+                  className="flex-1 min-w-0 border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5"
+                />
+                <button
+                  type="submit"
+                  className="bg-[var(--accent)] text-white rounded-[10px] px-4 py-2.5 text-sm font-semibold"
+                >
+                  {t("admin.products.add")}
+                </button>
+              </form>
+              {subcategoryError && <p className="text-sm text-[#b3402e] mb-3">{subcategoryError}</p>}
+
+              <SubcategoryList
+                subcategories={subcategoriesForManager}
+                productCounts={Object.fromEntries(
+                  subcategoriesForManager.map((subcategory) => [
+                    subcategory.id,
+                    products.filter((product) => product.subcategoryId === subcategory.id).length,
+                  ])
+                )}
+                onReorder={saveSubcategoryOrder}
+                onDelete={deleteSubcategory}
               />
-              <button
-                type="submit"
-                className="bg-[var(--accent)] text-white rounded-[10px] px-4 py-2.5 text-sm font-semibold"
-              >
-                {t("admin.products.add")}
-              </button>
-            </form>
-            {subcategoryError && <p className="text-sm text-[#b3402e] mb-3">{subcategoryError}</p>}
-
-            <SubcategoryList
-              subcategories={subcategoriesForManager}
-              productCounts={Object.fromEntries(
-                subcategoriesForManager.map((subcategory) => [
-                  subcategory.id,
-                  products.filter((product) => product.subcategoryId === subcategory.id).length,
-                ])
-              )}
-              onReorder={saveSubcategoryOrder}
-              onDelete={deleteSubcategory}
-            />
-          </>
+            </>
+          )}
+          </div>
         )}
       </div>
 
