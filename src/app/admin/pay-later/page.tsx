@@ -6,6 +6,7 @@ import { useLocale } from "@/components/locale-provider";
 import { ORDER_STATUS } from "@/lib/order-status";
 import { PAYMENT_METHOD } from "@/lib/payment-method";
 import { normalizeIsraeliPhone } from "@/lib/phone";
+import { calculateOrderTotals } from "@/lib/order-totals";
 
 type OrderItem = {
   id: string;
@@ -24,6 +25,7 @@ type Order = {
   settledAt: string | null;
   couponCode: string | null;
   discountPercent: number | null;
+  vatPercent: number | null;
   createdAt: string;
   items: OrderItem[];
 };
@@ -41,8 +43,7 @@ type Filter = (typeof FILTERS)[number];
 
 function orderTotal(order: Order): number {
   const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const discountAmount = order.discountPercent ? subtotal * (order.discountPercent / 100) : 0;
-  return subtotal - discountAmount;
+  return calculateOrderTotals(subtotal, order.discountPercent, order.vatPercent).total;
 }
 
 function isCancelled(order: Order): boolean {

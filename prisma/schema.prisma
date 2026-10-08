@@ -67,6 +67,13 @@ model Product {
   // Position chosen by the admin ("arrange products"); category pages list
   // products by it. Lower = earlier. New products go to the end.
   sortOrder     Int          @default(0)
+  // How the product is sold and counted: "UNIT" (יחידה) or "CARTON" (קרטון).
+  // See src/lib/product-unit.ts.
+  unit          String       @default("UNIT")
+  // Units in the warehouse, in `unit`. Null = not tracked (works as before).
+  // Orders reduce it; cancelling an order puts it back; at 0 the product
+  // turns out of stock.
+  stockQuantity Int?
   salePrice     Float?
   saleBannerImageUrl String?
   categories    Category[]
@@ -98,6 +105,9 @@ model Order {
   emailSentAt     DateTime?
   couponCode      String?
   discountPercent Int?
+  // VAT (מע"מ) rate charged on top of the prices, as a snapshot like
+  // discountPercent. Null = an order from before VAT was added at checkout.
+  vatPercent      Int?
   createdAt       DateTime    @default(now())
   items           OrderItem[]
 }
@@ -110,4 +120,8 @@ model OrderItem {
   productId String
   quantity  Int
   price     Float
+  // True while this line's quantity is taken off the product's stock, so a
+  // cancelled order returns exactly what it took (and orders from before stock
+  // tracking return nothing).
+  stockDeducted Boolean @default(false)
 }

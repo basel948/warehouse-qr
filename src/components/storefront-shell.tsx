@@ -21,6 +21,7 @@ import { WAREHOUSE_CONTACT_PHONE, WAREHOUSE_NAME } from "@/lib/branding";
 import { PAYMENT_METHOD, type PaymentMethod } from "@/lib/payment-method";
 import { type Product, ProductCard, ProductDetailModal } from "@/components/catalog-ui";
 import { getEffectivePrice } from "@/lib/effective-price";
+import { VAT_PERCENT, calculateOrderTotals } from "@/lib/order-totals";
 
 const CART_STORAGE_KEY = "warehouse-cart";
 
@@ -404,8 +405,12 @@ function CheckoutSheet({
     .filter((product) => cart[product.id] > 0)
     .map((product) => ({ product, quantity: cart[product.id] }));
 
-  const discountAmount = appliedCoupon ? subtotal * (appliedCoupon.discountPercent / 100) : 0;
-  const total = subtotal - discountAmount;
+  // Prices are before VAT; the buyer pays the total including VAT.
+  const { discountAmount, totalBeforeVat, vatAmount, total } = calculateOrderTotals(
+    subtotal,
+    appliedCoupon?.discountPercent,
+    VAT_PERCENT
+  );
 
   async function applyCoupon() {
     setCouponError(null);
@@ -486,6 +491,16 @@ function CheckoutSheet({
       const data = await res.json();
       if (!res.ok) {
         if (data.error === "invalid_phone") setError(t("checkout.errorInvalidPhone"));
+        else if (data.error === "insufficient_stock")
+          setError(
+            t("checkout.errorInsufficientStock", {
+              items: (data.items ?? [])
+                .map((item: { name: string; available: number }) =>
+                  t("checkout.stockLeft", { name: item.name, available: item.available })
+                )
+                .join(", "),
+            })
+          );
         else if (data.error === "out_of_stock")
           setError(t("checkout.errorOutOfStock", { names: (data.names ?? []).join(", ") }));
         else if (data.error === "too_many_orders") setError(t("checkout.errorTooManyOrders"));
@@ -604,8 +619,16 @@ function CheckoutSheet({
                   </div>
                 </>
               )}
+              <div className="flex items-center justify-between text-[#6b6259]">
+                <span>{t("checkout.totalBeforeVat")}</span>
+                <span>₪{totalBeforeVat.toFixed(2)}</span>
+              </div>
+              <div className="flex items-center justify-between text-[#6b6259]">
+                <span>{t("checkout.vat", { percent: VAT_PERCENT })}</span>
+                <span>₪{vatAmount.toFixed(2)}</span>
+              </div>
               <div className="flex items-center justify-between text-[17px] font-bold text-[#1a1714] pt-[7px] border-t border-[#f0ece5]">
-                <span>{t("checkout.total")}</span>
+                <span>{t("checkout.totalToPay")}</span>
                 <span>₪{total.toFixed(2)}</span>
               </div>
             </div>

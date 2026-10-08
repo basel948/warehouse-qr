@@ -11,11 +11,20 @@ import { getEffectivePrice } from "@/lib/effective-price";
 import { CHECKOUT_LIMITS } from "@/lib/checkout-limits";
 import { isValidIsraeliPhone, normalizeIsraeliPhone } from "@/lib/phone";
 import { clientIp, recordHit, retryAfterSeconds } from "@/lib/rate-limit";
+import { VAT_PERCENT, calculateOrderTotals } from "@/lib/order-totals";
+import { deductStock, quantitiesByProduct, type StockShortage } from "@/lib/stock";
 
 // Paused on the owner's request while the WhatsApp Business number/template
 // setup is still pending - orders only go out by email for now. Flip back
 // to true once that's ready.
 const ORDER_WHATSAPP_NOTIFICATIONS_ENABLED = false;
+
+// Thrown inside the order transaction to roll it back when stock runs short.
+class StockShortageError extends Error {
+  constructor(readonly shortages: StockShortage[]) {
+    super("insufficient_stock");
+  }
+}
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -126,28 +135,51 @@ export async function POST(request: Request) {
   recordHit(ipKey, ORDER_WINDOW_MS);
   recordHit(phoneKey, ORDER_WINDOW_MS);
 
-  const order = await prisma.order.create({
-    data: {
-      customerName,
-      businessName,
-      customerPhone,
-      paymentMethod,
-      couponCode: appliedCouponCode,
-      discountPercent,
-      items: {
-        create: items.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          price: getEffectivePrice(productById.get(item.productId)!),
-        })),
-      },
-    },
-    include: { items: { include: { product: true } } },
-  });
+  // Stock is taken off and the order saved together: if any tracked product
+  // is short, nothing is saved and the buyer is told what's available.
+  let order;
+  try {
+    order = await prisma.$transaction(async (tx) => {
+      const stock = await deductStock(tx, quantitiesByProduct(items));
+      if (!stock.ok) throw new StockShortageError(stock.shortages);
+      return tx.order.create({
+        data: {
+          customerName,
+          businessName,
+          customerPhone,
+          paymentMethod,
+          couponCode: appliedCouponCode,
+          discountPercent,
+          vatPercent: VAT_PERCENT,
+          items: {
+            create: items.map((item) => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              price: getEffectivePrice(productById.get(item.productId)!),
+              stockDeducted: stock.deducted.has(item.productId),
+            })),
+          },
+        },
+        include: { items: { include: { product: true } } },
+      });
+    });
+  } catch (error) {
+    if (error instanceof StockShortageError) {
+      return NextResponse.json(
+        {
+          error: "insufficient_stock",
+          items: error.shortages.map((s) => ({ productId: s.productId, name: s.name, available: s.available })),
+        },
+        { status: 409 }
+      );
+    }
+    throw error;
+  }
 
   const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const discountAmount = discountPercent ? subtotal * (discountPercent / 100) : 0;
-  const total = subtotal - discountAmount;
+  // Prices are before VAT; the buyer pays the total including VAT.
+  const totals = calculateOrderTotals(subtotal, discountPercent, order.vatPercent);
+  const { discountAmount, total } = totals;
 
   let whatsappError: string | null = null;
   let emailError: string | null = null;
@@ -163,13 +195,14 @@ export async function POST(request: Request) {
       items: order.items.map((item) => ({
         productName: item.product.name,
         quantity: item.quantity,
+        unit: item.product.unit,
         price: item.price,
         imageUrl: item.product.imageUrl,
       })),
       subtotal,
       couponCode: appliedCouponCode,
       discountPercent,
-      total,
+      vatPercent: order.vatPercent,
     });
 
     // A receipt only makes sense once payment is actually taken at order
@@ -190,13 +223,14 @@ export async function POST(request: Request) {
             items: order.items.map((item) => ({
               productName: item.product.name,
               quantity: item.quantity,
+              unit: item.product.unit,
               price: item.price,
               imageUrl: item.product.imageUrl,
             })),
             subtotal,
             couponCode: appliedCouponCode,
             discountPercent,
-            total,
+            vatPercent: order.vatPercent,
           })
         : null;
 
@@ -267,6 +301,9 @@ export async function POST(request: Request) {
         businessName: order.businessName,
         customerPhone: order.customerPhone,
         paymentMethod: order.paymentMethod as PaymentMethod,
+        totalBeforeVat: totals.totalBeforeVat,
+        vatPercent: totals.vatPercent,
+        vatAmount: totals.vatAmount,
         total,
         pdfBuffer,
         receiptPdfBuffer: receiptPdfBuffer ?? undefined,
@@ -287,7 +324,16 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(
-    { order, subtotal, discountAmount, total, whatsappError, emailError },
+    {
+      order,
+      subtotal,
+      discountAmount,
+      totalBeforeVat: totals.totalBeforeVat,
+      vatAmount: totals.vatAmount,
+      total,
+      whatsappError,
+      emailError,
+    },
     { status: 201 }
   );
 }

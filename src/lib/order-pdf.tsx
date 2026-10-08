@@ -3,6 +3,8 @@ import { Document, Font, Image, Page, StyleSheet, Text, View, renderToBuffer } f
 import { WAREHOUSE_LOGO_URL, WAREHOUSE_NAME } from "@/lib/branding";
 import { withImageTransform } from "@/lib/image-url";
 import { PAYMENT_METHOD_LABEL_HE, type PaymentMethod } from "@/lib/payment-method";
+import { calculateOrderTotals } from "@/lib/order-totals";
+import { formatQuantityHe } from "@/lib/product-unit";
 
 Font.register({
   family: "Alef",
@@ -15,6 +17,8 @@ Font.register({
 export type OrderPdfItem = {
   productName: string;
   quantity: number;
+  /** Product.unit ("UNIT" / "CARTON"); missing = יחידה. */
+  unit?: string | null;
   price: number;
   imageUrl: string | null;
 };
@@ -30,7 +34,8 @@ export type OrderPdfData = {
   subtotal: number;
   couponCode: string | null;
   discountPercent: number | null;
-  total: number;
+  /** VAT rate added on top (null = an order from before VAT was charged). */
+  vatPercent: number | null;
 };
 
 const styles = StyleSheet.create({
@@ -116,7 +121,7 @@ const TOTAL_LABEL: Record<DocumentVariant, string> = {
 };
 
 function OrderDocument({ order, variant }: { order: OrderPdfData; variant: DocumentVariant }) {
-  const discountAmount = order.discountPercent ? order.subtotal * (order.discountPercent / 100) : 0;
+  const totals = calculateOrderTotals(order.subtotal, order.discountPercent, order.vatPercent);
 
   return (
     <Document>
@@ -166,7 +171,9 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
           <View style={styles.tableRow}>
             <Text style={[styles.tableHeaderCell, styles.colProduct]}>מוצר</Text>
             <Text style={[styles.tableHeaderCell, styles.colQty]}>כמות</Text>
-            <Text style={[styles.tableHeaderCell, styles.colPrice]}>מחיר ליחידה</Text>
+            <Text style={[styles.tableHeaderCell, styles.colPrice]}>
+              {totals.vatPercent ? "מחיר ליחידה (לפני מע\"מ)" : "מחיר ליחידה"}
+            </Text>
             <Text style={[styles.tableHeaderCell, styles.colTotal]}>סה&quot;כ</Text>
           </View>
           {order.items.map((item, index) => (
@@ -180,7 +187,7 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
                 )}
                 <Text style={styles.productName}>{item.productName}</Text>
               </View>
-              <Text style={[styles.tableCell, styles.colQty]}>{item.quantity}</Text>
+              <Text style={[styles.tableCell, styles.colQty]}>{formatQuantityHe(item.quantity, item.unit)}</Text>
               <Text style={[styles.tableCell, styles.colPrice]}>{formatCurrency(item.price)}</Text>
               <Text style={[styles.tableCell, styles.colTotal]}>
                 {formatCurrency(item.price * item.quantity)}
@@ -198,7 +205,7 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
               </View>
               <View style={styles.totalsRow}>
                 <Text style={styles.totalsValue}>
-                  -{formatCurrency(discountAmount)}
+                  -{formatCurrency(totals.discountAmount)}
                 </Text>
                 <Text style={styles.totalsLabel}>
                   קופון <Text style={{ direction: "ltr" }}>{order.couponCode}</Text> (-
@@ -207,8 +214,20 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
               </View>
             </>
           )}
+          {totals.vatPercent ? (
+            <>
+              <View style={styles.totalsRow}>
+                <Text style={styles.totalsValue}>{formatCurrency(totals.totalBeforeVat)}</Text>
+                <Text style={styles.totalsLabel}>סה&quot;כ לפני מע&quot;מ</Text>
+              </View>
+              <View style={styles.totalsRow}>
+                <Text style={styles.totalsValue}>{formatCurrency(totals.vatAmount)}</Text>
+                <Text style={styles.totalsLabel}>מע&quot;מ {totals.vatPercent}%</Text>
+              </View>
+            </>
+          ) : null}
           <View style={styles.grandTotalRow}>
-            <Text style={styles.grandTotalValue}>{formatCurrency(order.total)}</Text>
+            <Text style={styles.grandTotalValue}>{formatCurrency(totals.total)}</Text>
             <Text style={styles.grandTotalLabel}>{TOTAL_LABEL[variant]}</Text>
           </View>
         </View>

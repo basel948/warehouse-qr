@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { toPublicProduct } from "@/lib/public-product";
 import { HomeCategoryGrid } from "./home-category-grid";
 import { SaleCarousel } from "@/components/sale-carousel";
 
@@ -21,7 +22,7 @@ export default async function HomePage() {
 
   return (
     <div>
-      <SaleCarousel products={saleProducts} />
+      <SaleCarousel products={saleProducts.map(toPublicProduct)} />
       <HomeCategoryGrid categories={categories} />
     </div>
   );

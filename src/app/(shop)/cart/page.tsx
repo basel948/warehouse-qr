@@ -8,6 +8,7 @@ import { PageBackLink } from "@/components/page-back-link";
 import { useCart } from "@/components/storefront-shell";
 import { getEffectivePrice } from "@/lib/effective-price";
 import { optimizedImage } from "@/lib/image-url";
+import { asProductUnit } from "@/lib/product-unit";
 
 // The buyer's cart: review items, change amounts or remove them, then open
 // the payment window from the button at the bottom.
@@ -73,7 +74,10 @@ export default function CartPage() {
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-[#1a1714] leading-snug line-clamp-2">{product.name}</p>
                     <p className="text-xs text-[#8a8177] mt-0.5">
-                      {t("cart.unitPrice", { price: unitPrice.toFixed(2) })}
+                      {t("cart.unitPrice", {
+                        price: unitPrice.toFixed(2),
+                        per: t(`catalog.perUnit.${asProductUnit(product.unit)}`),
+                      })}
                     </p>
                   </div>
                   <button

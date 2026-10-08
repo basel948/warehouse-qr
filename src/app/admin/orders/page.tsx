@@ -6,12 +6,14 @@ import { useLocale } from "@/components/locale-provider";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Spinner, useToast } from "@/components/toast";
 import { ORDER_STATUS } from "@/lib/order-status";
+import { calculateOrderTotals } from "@/lib/order-totals";
+import { asProductUnit } from "@/lib/product-unit";
 
 type OrderItem = {
   id: string;
   quantity: number;
   price: number;
-  product: { name: string };
+  product: { name: string; unit: string };
 };
 
 type Order = {
@@ -26,6 +28,7 @@ type Order = {
   emailSentAt: string | null;
   couponCode: string | null;
   discountPercent: number | null;
+  vatPercent: number | null;
   createdAt: string;
   items: OrderItem[];
 };
@@ -146,8 +149,11 @@ export default function AdminOrdersPage() {
       <ul className="space-y-3.5">
         {visibleOrders.map((order) => {
           const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-          const discountAmount = order.discountPercent ? subtotal * (order.discountPercent / 100) : 0;
-          const total = subtotal - discountAmount;
+          const { discountAmount, vatPercent, vatAmount, total } = calculateOrderTotals(
+            subtotal,
+            order.discountPercent,
+            order.vatPercent
+          );
           return (
             <li key={order.id} className="bg-white border border-[#eae5dc] rounded-[14px] p-[18px]">
               <div className="flex items-start justify-between gap-4 mb-3.5">
@@ -204,8 +210,12 @@ export default function AdminOrdersPage() {
                     <span>
                       {t("admin.orders.itemLine", {
                         qty: item.quantity,
+                        unit: t(
+                          `catalog.${item.quantity === 1 ? "unitName" : "unitMany"}.${asProductUnit(item.product.unit)}`
+                        ),
                         name: item.product.name,
                         price: item.price.toFixed(2),
+                        per: t(`catalog.perUnit.${asProductUnit(item.product.unit)}`),
                       })}
                     </span>
                   </div>
@@ -221,6 +231,12 @@ export default function AdminOrdersPage() {
                     <span>-₪{discountAmount.toFixed(2)}</span>
                   </div>
                 )}
+                {vatPercent ? (
+                  <div className="flex items-center justify-between text-[#6b6259]">
+                    <span>{t("admin.orders.vatLine", { percent: vatPercent })}</span>
+                    <span>+₪{vatAmount.toFixed(2)}</span>
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex items-center justify-between mt-3.5">

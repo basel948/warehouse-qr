@@ -4,6 +4,7 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ORDER_STATUS } from "@/lib/order-status";
+import { redeductOrderStock, restoreOrderStock } from "@/lib/stock";
 
 const updateOrderSchema = z.object({
   status: z.enum([ORDER_STATUS.PENDING, ORDER_STATUS.CONFIRMED, ORDER_STATUS.CANCELLED]),
@@ -20,10 +21,21 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const order = await prisma.order.update({
-    where: { id: params.id },
-    data: { status: parsed.data.status },
+  const next = parsed.data.status;
+  const order = await prisma.$transaction(async (tx) => {
+    const current = await tx.order.findUnique({ where: { id: params.id }, select: { status: true } });
+    if (!current) return null;
+    // Cancelling returns the order's stock; reopening a cancelled order takes it again.
+    if (next === ORDER_STATUS.CANCELLED && current.status !== ORDER_STATUS.CANCELLED) {
+      await restoreOrderStock(tx, params.id);
+    } else if (current.status === ORDER_STATUS.CANCELLED && next !== ORDER_STATUS.CANCELLED) {
+      await redeductOrderStock(tx, params.id);
+    }
+    return tx.order.update({ where: { id: params.id }, data: { status: next } });
   });
+  if (!order) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
   return NextResponse.json(order);
 }
 

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { toPublicProduct } from "@/lib/public-product";
 import { CategorySections } from "./category-sections";
 
 export const dynamic = "force-dynamic";
@@ -32,7 +33,7 @@ export default async function CategoryPage({
     <CategorySections
       categoryName={category.name}
       subcategories={category.subcategories}
-      products={products}
+      products={products.map(toPublicProduct)}
     />
   );
 }

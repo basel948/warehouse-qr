@@ -7,6 +7,9 @@ type OrderEmailMessage = {
   businessName: string;
   customerPhone: string;
   paymentMethod: PaymentMethod;
+  totalBeforeVat: number;
+  vatPercent: number | null;
+  vatAmount: number;
   total: number;
   pdfBuffer: Buffer;
   receiptPdfBuffer?: Buffer;
@@ -51,7 +54,13 @@ export async function sendOrderEmail(order: OrderEmailMessage): Promise<void> {
             `מעסיק מורשה / שם העסק: ${order.businessName || "-"}`,
             `מספר טלפון: ${order.customerPhone}`,
             `אופן תשלום: ${PAYMENT_METHOD_LABEL_HE[order.paymentMethod]}`,
-            `סה"כ: ₪${order.total.toFixed(2)}`,
+            ...(order.vatPercent
+              ? [
+                  `סה"כ לפני מע"מ: ₪${order.totalBeforeVat.toFixed(2)}`,
+                  `מע"מ ${order.vatPercent}%: ₪${order.vatAmount.toFixed(2)}`,
+                ]
+              : []),
+            `סה"כ לתשלום: ₪${order.total.toFixed(2)}`,
             "",
             order.receiptPdfBuffer
               ? "פרטי ההזמנה והקבלה מצורפים כ-PDF."

@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { PRODUCT_UNIT } from "@/lib/product-unit";
 
 const updateProductSchema = z.object({
   name: z.string().min(1).optional(),
@@ -15,6 +16,8 @@ const updateProductSchema = z.object({
   saleBannerImageUrl: z.string().url().nullable().optional(),
   categoryIds: z.array(z.string().min(1)).optional(),
   subcategoryId: z.string().min(1).nullable().optional(),
+  unit: z.enum([PRODUCT_UNIT.UNIT, PRODUCT_UNIT.CARTON]).optional(),
+  stockQuantity: z.number().int().min(0).max(1_000_000).nullable().optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
@@ -29,6 +32,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 
   const { categoryIds, ...rest } = parsed.data;
+  // Setting a quantity also sets in/out of stock, unless the request says.
+  if (rest.stockQuantity != null && rest.inStock === undefined) rest.inStock = rest.stockQuantity > 0;
 
   if (rest.onSale !== undefined || rest.salePrice !== undefined || rest.price !== undefined) {
     const existing = await prisma.product.findUnique({ where: { id: params.id } });

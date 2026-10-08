@@ -43,11 +43,11 @@ export function BackToTop({ bottomClass = "bottom-5" }: { bottomClass?: string }
       onClick={scrollToTop}
       aria-label={t("nav.backToTop")}
       tabIndex={visible ? 0 : -1}
-      className={`fixed end-4 ${bottomClass} z-20 w-12 h-12 rounded-full bg-[var(--accent)] text-white ring-2 ring-white shadow-[0_8px_20px_-6px_rgba(0,0,0,0.5)] flex items-center justify-center transition-all duration-200 ${
+      className={`fixed end-4 ${bottomClass} z-20 w-10 h-10 rounded-full bg-[var(--accent)] text-white ring-2 ring-white shadow-[0_8px_20px_-6px_rgba(0,0,0,0.5)] flex items-center justify-center transition-all duration-200 ${
         visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-3 pointer-events-none"
       }`}
     >
-      <ArrowUpIcon className="w-6 h-6" />
+      <ArrowUpIcon className="w-5 h-5" />
     </button>
   );
 }

@@ -5,6 +5,7 @@ import { PackageIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 import { optimizedImage } from "@/lib/image-url";
 import { getSalePercentOff } from "@/lib/effective-price";
+import { asProductUnit } from "@/lib/product-unit";
 
 export type Category = {
   id: string;
@@ -30,20 +31,35 @@ export type Product = {
   saleBannerImageUrl: string | null;
   categories: Category[];
   subcategory: Subcategory | null;
+  /** "UNIT" or "CARTON" (src/lib/product-unit.ts). */
+  unit: string;
 };
 
 function PriceDisplay({ product, size = "sm" }: { product: Product; size?: "sm" | "lg" }) {
+  const { t } = useLocale();
   const isOnSale = product.onSale && product.salePrice != null;
   const priceClass = size === "lg" ? "text-xl font-bold" : "text-sm font-bold";
+  // "/ קרטון": what the price is for.
+  const per = (
+    <span className="text-[#8a8177] font-medium text-[0.78em]">
+      / {t(`catalog.unitName.${asProductUnit(product.unit)}`)}
+    </span>
+  );
   if (!isOnSale) {
-    return <p className={`${priceClass} text-[#1a1714]`}>₪{product.price.toFixed(2)}</p>;
+    return (
+      <p className={`${priceClass} text-[#1a1714] flex items-baseline gap-1 flex-wrap`}>
+        <span>₪{product.price.toFixed(2)}</span>
+        {per}
+      </p>
+    );
   }
   return (
-    <p className={`${priceClass} flex items-center gap-1.5 flex-wrap`}>
+    <p className={`${priceClass} flex items-baseline gap-1.5 flex-wrap`}>
       <span className="text-[#b3402e]">₪{product.salePrice!.toFixed(2)}</span>
       <span className="text-[#a39a8e] font-medium line-through text-[0.85em]">
         ₪{product.price.toFixed(2)}
       </span>
+      {per}
     </p>
   );
 }

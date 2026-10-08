@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { CategoryFilter, matchesCategoryFilter, type CategoryFilterValue } from "@/components/category-filter";
 import { ImageUploadField } from "@/components/image-upload-field";
 import { ActionsMenu } from "./actions-menu";
 import { CategoryList } from "./category-list";
+import { UnitStockFields, parseStockInput } from "./unit-stock-fields";
 import { ProductOrderSection } from "./product-order-list";
 import { ChevronDownIcon, DuplicateIcon, EditIcon, PackageIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 import { useConfirm } from "@/components/confirm-dialog";
 import { Spinner, useToast } from "@/components/toast";
 import { optimizedImage } from "@/lib/image-url";
+import { LOW_STOCK_THRESHOLD, PRODUCT_UNIT, asProductUnit } from "@/lib/product-unit";
 
 type Category = {
   id: string;
@@ -33,6 +36,8 @@ type Product = {
   imageUrl: string | null;
   inStock: boolean;
   sortOrder: number;
+  unit: string;
+  stockQuantity: number | null;
   onSale: boolean;
   salePrice: number | null;
   saleBannerImageUrl: string | null;
@@ -111,6 +116,11 @@ function CategoryMultiSelect({
 
 type ProductAction = "stock" | "sale" | "duplicate" | "delete" | "save";
 
+// Tracked products at or below the threshold (0 included) need restocking.
+function isLowStock(product: { stockQuantity: number | null }): boolean {
+  return product.stockQuantity != null && product.stockQuantity <= LOW_STOCK_THRESHOLD;
+}
+
 export default function AdminProductsPage() {
   const { t } = useLocale();
   const toast = useToast();
@@ -126,6 +136,8 @@ export default function AdminProductsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
+  const [unit, setUnit] = useState<string>(PRODUCT_UNIT.UNIT);
+  const [stock, setStock] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [subcategoryId, setSubcategoryId] = useState("");
@@ -137,6 +149,8 @@ export default function AdminProductsPage() {
 
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [listFilter, setListFilter] = useState<CategoryFilterValue>({ categoryId: "", subcategoryId: "" });
+  const [lowStockOnly, setLowStockOnly] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [subcatsOpen, setSubcatsOpen] = useState(false);
 
@@ -146,6 +160,8 @@ export default function AdminProductsPage() {
   const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editPrice, setEditPrice] = useState("");
+  const [editUnit, setEditUnit] = useState<string>(PRODUCT_UNIT.UNIT);
+  const [editStock, setEditStock] = useState("");
   const [editImageUrl, setEditImageUrl] = useState("");
   const [editOnSale, setEditOnSale] = useState(false);
   const [editSaleMode, setEditSaleMode] = useState<"amount" | "percent">("amount");
@@ -324,6 +340,11 @@ export default function AdminProductsPage() {
       setError(t("admin.products.invalidProduct"));
       return;
     }
+    const parsedStock = parseStockInput(stock);
+    if (Number.isNaN(parsedStock)) {
+      setError(t("admin.products.invalidStock"));
+      return;
+    }
 
     const res = await fetch("/api/products", {
       method: "POST",
@@ -335,6 +356,8 @@ export default function AdminProductsPage() {
         imageUrl: imageUrl || undefined,
         categoryIds: categoryIds.length > 0 ? categoryIds : undefined,
         subcategoryId: subcategoryId || undefined,
+        unit,
+        stockQuantity: parsedStock,
       }),
     });
 
@@ -346,6 +369,7 @@ export default function AdminProductsPage() {
     setName("");
     setDescription("");
     setPrice("");
+    setStock("");
     setImageUrl("");
     setCategoryIds([]);
     setSubcategoryId("");
@@ -371,6 +395,7 @@ export default function AdminProductsPage() {
         price: product.price,
         imageUrl: product.imageUrl || undefined,
         inStock: product.inStock,
+        unit: product.unit,
         categoryIds: product.categories.map((category) => category.id),
         subcategoryId: product.subcategoryId || undefined,
       }),
@@ -393,6 +418,8 @@ export default function AdminProductsPage() {
     setEditName(product.name);
     setEditDescription(product.description ?? "");
     setEditPrice(String(product.price));
+    setEditUnit(product.unit);
+    setEditStock(product.stockQuantity != null ? String(product.stockQuantity) : "");
     setEditImageUrl(product.imageUrl ?? "");
     setEditOnSale(product.onSale);
     setEditSaleMode("amount");
@@ -415,6 +442,11 @@ export default function AdminProductsPage() {
     const parsedPrice = Number(editPrice);
     if (!editName.trim() || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
       setEditError(t("admin.products.invalidProduct"));
+      return;
+    }
+    const parsedStock = parseStockInput(editStock);
+    if (Number.isNaN(parsedStock)) {
+      setEditError(t("admin.products.invalidStock"));
       return;
     }
 
@@ -463,6 +495,8 @@ export default function AdminProductsPage() {
         salePrice: editOnSale ? parsedSalePrice : null,
         saleBannerImageUrl: editOnSale ? editSaleBannerImageUrl || null : null,
         categoryIds: editCategoryIds,
+        unit: editUnit,
+        stockQuantity: parsedStock,
         // A subcategory only makes sense under one of the product's categories.
         subcategoryId: subcategories.some(
           (s) => s.id === editSubcategoryId && editCategoryIds.includes(s.categoryId)
@@ -589,9 +623,13 @@ export default function AdminProductsPage() {
     };
   }, [editingId]);
 
-  const filteredProducts = products.filter((product) =>
-    product.name.toLowerCase().includes(searchQuery.trim().toLowerCase())
+  const filteredProducts = products.filter(
+    (product) =>
+      product.name.toLowerCase().includes(searchQuery.trim().toLowerCase()) &&
+      matchesCategoryFilter(product, listFilter) &&
+      (!lowStockOnly || isLowStock(product))
   );
+  const listFiltered = searchQuery.trim() !== "" || listFilter.categoryId !== "" || lowStockOnly;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-4 space-y-[22px]">
@@ -765,6 +803,7 @@ export default function AdminProductsPage() {
                 onChange={(e) => setDescription(e.target.value)}
                 className="w-full border border-[#e6e0d6] rounded-[10px] px-3.5 py-2.5"
               />
+              <UnitStockFields unit={unit} onUnitChange={setUnit} stock={stock} onStockChange={setStock} />
               <div className="flex items-center gap-3.5 flex-wrap">
                 <ImageUploadField
                   value={imageUrl}
@@ -796,8 +835,31 @@ export default function AdminProductsPage() {
           placeholder={t("admin.products.searchPlaceholder")}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5 mb-4"
+          className="w-full border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5 mb-2"
         />
+        <div className="mb-2">
+          <CategoryFilter
+            categories={categories}
+            subcategories={subcategories}
+            value={listFilter}
+            onChange={setListFilter}
+          />
+        </div>
+        <label className="flex items-center gap-2 text-[13px] font-medium text-[#4a443c] mb-2 w-fit">
+          <input
+            type="checkbox"
+            checked={lowStockOnly}
+            onChange={(e) => setLowStockOnly(e.target.checked)}
+            className="w-4 h-4 accent-[var(--accent)]"
+          />
+          {t("admin.products.lowStockOnly", { threshold: LOW_STOCK_THRESHOLD })}
+        </label>
+        {listFiltered && !loading && (
+          <p className="text-[13px] text-[#8a8177] mb-3">
+            {t("admin.products.filterMatches", { count: filteredProducts.length, total: products.length })}
+          </p>
+        )}
+        {!listFiltered && <div className="mb-2" />}
 
 
         {loading ? (
@@ -806,7 +868,9 @@ export default function AdminProductsPage() {
           <p className="text-sm text-[#8a8177]">{t("admin.products.noProductsYet")}</p>
         ) : filteredProducts.length === 0 ? (
           <p className="text-sm text-[#8a8177]">
-            {t("admin.products.noProductsMatch", { query: searchQuery })}
+            {searchQuery.trim()
+              ? t("admin.products.noProductsMatch", { query: searchQuery })
+              : t("catalog.noProductsMatchFilter")}
           </p>
         ) : (
           <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -876,6 +940,11 @@ export default function AdminProductsPage() {
                           {t("admin.products.onSaleLabel")}
                         </span>
                       )}
+                      {isLowStock(product) && product.stockQuantity !== 0 && (
+                        <span className="text-xs font-semibold rounded-full px-2.5 py-1 bg-[#fdf1e3] text-[#9a5a06]">
+                          {t("admin.products.lowStockBadge")}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -896,7 +965,20 @@ export default function AdminProductsPage() {
                       ) : (
                         <span className="text-base font-bold text-[#1a1714]">₪{product.price.toFixed(2)}</span>
                       )}
+                      <span className="text-xs text-[#8a8177]">/ {t(`catalog.unitName.${asProductUnit(product.unit)}`)}</span>
                     </span>
+                    {product.stockQuantity != null && (
+                      <span
+                        className={`text-[13px] font-semibold ${
+                          isLowStock(product) ? "text-[#9a5a06]" : "text-[#2f6b3a]"
+                        }`}
+                      >
+                        {t("admin.products.stockLine", {
+                          count: product.stockQuantity,
+                          unit: t(`catalog.unitMany.${asProductUnit(product.unit)}`),
+                        })}
+                      </span>
+                    )}
                     <span className="text-xs text-[#8a8177] line-clamp-1">
                       {product.categories.length > 0
                         ? product.categories.map((category) => category.name).join(", ")
@@ -971,6 +1053,12 @@ export default function AdminProductsPage() {
                 value={editDescription}
                 onChange={(e) => setEditDescription(e.target.value)}
                 className="w-full border border-[#e6e0d6] rounded-[9px] px-3 py-2 text-sm bg-white"
+              />
+              <UnitStockFields
+                unit={editUnit}
+                onUnitChange={setEditUnit}
+                stock={editStock}
+                onStockChange={setEditStock}
               />
               <div className="flex items-center gap-2 flex-wrap">
                 <label className="flex items-center gap-1.5 text-sm text-[#4a443c]">
