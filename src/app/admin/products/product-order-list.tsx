@@ -19,7 +19,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripIcon, PackageIcon } from "@/components/icons";
+import { ChevronDownIcon, GripIcon, PackageIcon, TrashIcon } from "@/components/icons";
 import { useConfirm } from "@/components/confirm-dialog";
 import { useLocale } from "@/components/locale-provider";
 import { useToast } from "@/components/toast";
@@ -42,18 +42,30 @@ type OrderSubcategory = { id: string; name: string; categoryId: string };
 // buyers see on that category's page. Grouped by subcategory exactly like the
 // shop page (subcategories in their own order, products without one last), and
 // each group is reordered on its own. Saves as soon as a product is dropped.
-// Products can also be ticked and then marked out of / back in stock or
-// deleted together (one confirmation for the whole batch).
+// Products can also be ticked and then marked out of / back in stock, moved
+// to another subcategory, or deleted together (one confirmation per batch).
+// Subcategories are listed closed; opening one closes the others, and their
+// rows can be dragged to reorder the subcategories themselves. New
+// subcategories are added here too, and each row can delete its subcategory.
 export function ProductOrderSection({
   categories,
   subcategories,
   products,
   onSaved,
+  onReorderSubcategories,
+  onAddSubcategory,
+  onDeleteSubcategory,
 }: {
   categories: OrderCategory[];
   subcategories: OrderSubcategory[];
   products: OrderProduct[];
   onSaved: () => void;
+  /** Saves a category's subcategories in this new order (ids). */
+  onReorderSubcategories: (orderedIds: string[]) => void;
+  /** Adds a subcategory to a category; resolves to an error message or null. */
+  onAddSubcategory: (categoryId: string, name: string) => Promise<string | null>;
+  /** Deletes a subcategory (asks for confirmation first). */
+  onDeleteSubcategory: (id: string) => void;
 }) {
   const { t } = useLocale();
   const toast = useToast();
@@ -61,6 +73,10 @@ export function ProductOrderSection({
   const [categoryId, setCategoryId] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  // Accordion: at most one subcategory is open, so only its products show.
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
+  const [newSubcategoryName, setNewSubcategoryName] = useState("");
+  const [addError, setAddError] = useState<string | null>(null);
   // Local order while a save is in flight, so the list doesn't jump back.
   const [override, setOverride] = useState<Record<string, number>>({});
 
@@ -69,18 +85,32 @@ export function ProductOrderSection({
     .filter((p) => p.categories.some((c) => c.id === categoryId))
     .sort((a, b) => position(a) - position(b) || a.name.localeCompare(b.name, "he"));
 
+  // Every subcategory is listed (empty ones too, so they can be arranged);
+  // the "other" group (no subcategory) only when it has products, always last.
+  const subGroups = subcategories
+    .filter((s) => s.categoryId === categoryId)
+    .map((s) => ({ id: s.id, name: s.name, items: inCategory.filter((p) => p.subcategoryId === s.id) }));
+  const otherItems = inCategory.filter(
+    (p) => !p.subcategoryId || !subcategories.some((s) => s.id === p.subcategoryId && s.categoryId === categoryId)
+  );
   const groups = [
-    ...subcategories
-      .filter((s) => s.categoryId === categoryId)
-      .map((s) => ({ id: s.id, name: s.name, items: inCategory.filter((p) => p.subcategoryId === s.id) })),
-    {
-      id: "other",
-      name: t("catalog.otherCategory"),
-      items: inCategory.filter(
-        (p) => !p.subcategoryId || !subcategories.some((s) => s.id === p.subcategoryId && s.categoryId === categoryId)
-      ),
-    },
-  ].filter((g) => g.items.length > 0);
+    ...subGroups,
+    ...(otherItems.length > 0 ? [{ id: "other", name: t("catalog.otherCategory"), items: otherItems }] : []),
+  ];
+  const groupSensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  function handleGroupDragEnd({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id) return;
+    const ids = subGroups.map((g) => g.id);
+    const from = ids.indexOf(String(active.id));
+    const to = ids.indexOf(String(over.id));
+    if (from < 0 || to < 0) return;
+    onReorderSubcategories(arrayMove(ids, from, to));
+  }
 
   // Only ticked products still in this category count (one may have been
   // deleted or moved meanwhile).
@@ -139,6 +169,44 @@ export function ProductOrderSection({
     }
   }
 
+  // Moves the ticked products into another subcategory of this category
+  // ("" = no subcategory, the "other" group). One confirmation for all.
+  async function moveToSubcategory(subcategoryId: string) {
+    const count = selectedHere.length;
+    if (count === 0) return;
+    const target = subcategories.find((s) => s.id === subcategoryId);
+    const name = target ? target.name : t("catalog.otherCategory");
+    const ok = await confirm({
+      title: t("admin.confirmDialog.bulkMoveTitle", { count, name }),
+      message: t("admin.confirmDialog.bulkMoveBody"),
+      confirmLabel: t("admin.confirmDialog.bulkMove"),
+      tone: "normal",
+    });
+    if (!ok) return;
+
+    setBulkBusy(true);
+    const res = await fetch("/api/products/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        productIds: selectedHere.map((p) => p.id),
+        action: "subcategory",
+        subcategoryId: subcategoryId || null,
+      }),
+    }).catch(() => null);
+    setBulkBusy(false);
+    if (!res?.ok) {
+      toast(t("admin.products.toastFailed"), "error");
+      return;
+    }
+    const { updated } = (await res.json()) as { updated: number };
+    setSelected(new Set());
+    // Open the destination so the moved products are in view.
+    setOpenGroup(subcategoryId || "other");
+    onSaved();
+    toast(t("admin.products.bulkMoved", { count: updated, name }));
+  }
+
   async function saveGroup(reordered: OrderProduct[]) {
     // Hand the group's own positions back out in the new order (mirrors the API).
     const slots = reordered.map(position).sort((a, b) => a - b);
@@ -159,7 +227,6 @@ export function ProductOrderSection({
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-[#1a1714] mb-1">{t("admin.products.arrangeTitle")}</h1>
       <p className="text-[13px] text-[#8a8177] mb-3">{t("admin.products.arrangeHint")}</p>
 
       <select
@@ -168,6 +235,9 @@ export function ProductOrderSection({
           setCategoryId(e.target.value);
           setOverride({});
           setSelected(new Set());
+          setOpenGroup(null);
+          setNewSubcategoryName("");
+          setAddError(null);
         }}
         className="border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5 mb-3 w-full sm:w-auto"
       >
@@ -178,6 +248,33 @@ export function ProductOrderSection({
           </option>
         ))}
       </select>
+
+      {categoryId && (
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const error = await onAddSubcategory(categoryId, newSubcategoryName);
+            setAddError(error);
+            if (!error) setNewSubcategoryName("");
+          }}
+          className="flex gap-2 mb-3"
+        >
+          <input
+            type="text"
+            placeholder={t("admin.products.newSubcategoryPlaceholder")}
+            value={newSubcategoryName}
+            onChange={(e) => setNewSubcategoryName(e.target.value)}
+            className="flex-1 min-w-0 border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5"
+          />
+          <button
+            type="submit"
+            className="bg-[var(--accent)] text-white rounded-[10px] px-4 py-2.5 text-sm font-semibold shrink-0"
+          >
+            {t("admin.products.add")}
+          </button>
+        </form>
+      )}
+      {addError && <p className="text-sm text-[#b3402e] -mt-1.5 mb-3">{addError}</p>}
 
       {inCategory.length > 0 && (
         <label className="flex items-center gap-2 text-[13px] font-medium text-[#4a443c] mb-2 w-fit">
@@ -195,16 +292,43 @@ export function ProductOrderSection({
         <p className="text-sm text-[#8a8177]">{t("admin.products.arrangeEmpty")}</p>
       )}
 
-      <div className="space-y-4">
-        {groups.map((group) => (
-          <div key={group.id}>
-            {groups.length > 1 && (
-              <p className="text-[13px] font-semibold text-[#6b6259] mb-1.5">{group.name}</p>
-            )}
-            <SortableProducts items={group.items} onReorder={saveGroup} selected={selected} onToggle={toggle} />
-          </div>
-        ))}
-      </div>
+      {/* A category with no subcategories: its products show directly. */}
+      {subGroups.length === 0 && otherItems.length > 0 && (
+        <SortableProducts items={otherItems} onReorder={saveGroup} selected={selected} onToggle={toggle} />
+      )}
+
+      {subGroups.length > 0 && (
+        <DndContext sensors={groupSensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEnd}>
+          <SortableContext items={subGroups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-2">
+              {groups.map((group) => {
+                const open = openGroup === group.id;
+                const ticked = group.items.filter((p) => selected.has(p.id)).length;
+                return (
+                  <SortableGroup
+                    key={group.id}
+                    id={group.id}
+                    sortable={group.id !== "other"}
+                    name={group.name}
+                    count={group.items.length}
+                    ticked={ticked}
+                    open={open}
+                    onToggle={() => setOpenGroup(open ? null : group.id)}
+                    onDelete={group.id !== "other" ? () => onDeleteSubcategory(group.id) : undefined}
+                  >
+                    {open &&
+                      (group.items.length > 0 ? (
+                        <SortableProducts items={group.items} onReorder={saveGroup} selected={selected} onToggle={toggle} />
+                      ) : (
+                        <p className="text-[13px] text-[#a39a8e] px-3.5 py-2">{t("admin.products.arrangeEmpty")}</p>
+                      ))}
+                  </SortableGroup>
+                );
+              })}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
 
       {selectedHere.length > 0 && (
         // Pinned to the bottom of the screen while scrolling a long list.
@@ -228,6 +352,27 @@ export function ProductOrderSection({
           >
             {t("admin.products.markInStock")}
           </button>
+          {subcategories.some((s) => s.categoryId === categoryId) && (
+            <select
+              value=""
+              disabled={bulkBusy}
+              onChange={(e) => moveToSubcategory(e.target.value === "other" ? "" : e.target.value)}
+              aria-label={t("admin.products.bulkMoveTo")}
+              className="text-[13px] font-semibold rounded-[8px] bg-white/10 text-white px-2 py-1.5 disabled:opacity-50 [&>option]:text-[#1a1714]"
+            >
+              <option value="" disabled>
+                {t("admin.products.bulkMoveTo")}
+              </option>
+              {subcategories
+                .filter((s) => s.categoryId === categoryId)
+                .map((subcategory) => (
+                  <option key={subcategory.id} value={subcategory.id}>
+                    {subcategory.name}
+                  </option>
+                ))}
+              <option value="other">{t("catalog.otherCategory")}</option>
+            </select>
+          )}
           <button
             type="button"
             disabled={bulkBusy}
@@ -351,5 +496,95 @@ function SortableProductRow({
         {product.name}
       </span>
     </li>
+  );
+}
+
+// One subcategory row in the arrange list: drag it (hold anywhere on the row,
+// or the grip) to reorder subcategories, tap it to open its products. The
+// "other" group (no subcategory) isn't draggable: it always comes last.
+function SortableGroup({
+  id,
+  sortable,
+  name,
+  count,
+  ticked,
+  open,
+  onToggle,
+  onDelete,
+  children,
+}: {
+  id: string;
+  sortable: boolean;
+  name: string;
+  count: number;
+  ticked: number;
+  open: boolean;
+  onToggle: () => void;
+  onDelete?: () => void;
+  children: React.ReactNode;
+}) {
+  const { t } = useLocale();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+    disabled: !sortable,
+  });
+  const { onKeyDown, ...pointerListeners } = (sortable && listeners) || {};
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={isDragging ? "relative z-10 opacity-90" : ""}
+    >
+      <div
+        {...pointerListeners}
+        className={`flex items-center bg-[#f7f5f1] border border-[#eae5dc] rounded-[10px] select-none [-webkit-touch-callout:none] ${
+          open ? "mb-1.5" : ""
+        } ${isDragging ? "shadow-lg" : ""}`}
+      >
+        {sortable ? (
+          <span
+            {...attributes}
+            onKeyDown={onKeyDown as React.KeyboardEventHandler | undefined}
+            aria-label={t("admin.products.dragSubcategoryAria", { name })}
+            className="w-7 h-11 flex items-center justify-center text-[#c5bdb1] cursor-grab active:cursor-grabbing shrink-0 ms-1"
+          >
+            <GripIcon className="w-4 h-4" />
+          </span>
+        ) : (
+          <span className="w-7 shrink-0 ms-1" />
+        )}
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={open}
+          className={`flex-1 min-w-0 flex items-center gap-2.5 py-2.5 text-start ${onDelete ? "pe-1" : "pe-3.5"}`}
+        >
+          <span className="flex-1 min-w-0 text-sm font-semibold text-[#1a1714] truncate">{name}</span>
+          {ticked > 0 && (
+            <span className="text-xs font-semibold rounded-full px-2 py-0.5 bg-[var(--accent)] text-white">
+              {t("admin.products.bulkSelected", { count: ticked })}
+            </span>
+          )}
+          <span className="text-xs text-[#a39a8e] tabular-nums shrink-0">
+            {t("admin.products.subcategoryProductCount", { count })}
+          </span>
+          <ChevronDownIcon
+            className={`w-4 h-4 shrink-0 text-[#6b6259] transition-transform ${open ? "rotate-180" : ""}`}
+          />
+        </button>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label={t("admin.products.deleteCategoryAria", { name })}
+            className="w-9 h-9 me-1 shrink-0 flex items-center justify-center rounded-[8px] text-[#a39a8e] hover:text-[#b3402e] hover:bg-white"
+          >
+            <TrashIcon className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+      {children}
+    </div>
   );
 }

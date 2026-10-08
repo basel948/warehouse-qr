@@ -5,6 +5,7 @@ import { CHECKOUT_LIMITS } from "@/lib/checkout-limits";
 import { isValidIsraeliPhone } from "@/lib/phone";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BackToTop } from "@/components/back-to-top";
 import { BrandLogo } from "@/components/brand-logo";
 import {
   CashIcon,
@@ -297,6 +298,9 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
         )}
+
+        {/* Raised above the floating cart bar (and the cart page's pay bar). */}
+        <BackToTop bottomClass={cartCount > 0 ? "bottom-24" : "bottom-5"} />
 
         {checkoutOpen && allProducts && (
           <CheckoutSheet

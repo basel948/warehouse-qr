@@ -6,10 +6,13 @@ import { prisma } from "@/lib/prisma";
 
 const bulkSchema = z.object({
   productIds: z.array(z.string().min(1)).min(1).max(1000),
-  action: z.enum(["inStock", "outOfStock", "delete"]),
+  action: z.enum(["inStock", "outOfStock", "delete", "subcategory"]),
+  // For "subcategory": the target, or null for no subcategory ("other").
+  subcategoryId: z.string().min(1).nullable().optional(),
 });
 
-// Bulk actions from the admin's "arrange products" list. Delete follows the
+// Bulk actions from the admin's "arrange products" list: stock on/off, move
+// to another subcategory, or delete. Delete follows the
 // single-product rule: a product that has ever been ordered is kept (past
 // orders reference it) and reported back as skipped.
 export async function POST(request: Request) {
@@ -24,6 +27,23 @@ export async function POST(request: Request) {
   }
   const { action } = parsed.data;
   const ids = Array.from(new Set(parsed.data.productIds));
+
+  if (action === "subcategory") {
+    const subcategoryId = parsed.data.subcategoryId ?? null;
+    if (subcategoryId) {
+      // A subcategory only makes sense under its own category: move only the
+      // products that belong to that category.
+      const target = await prisma.subcategory.findUnique({ where: { id: subcategoryId } });
+      if (!target) return NextResponse.json({ error: "unknown_subcategory" }, { status: 400 });
+      const result = await prisma.product.updateMany({
+        where: { id: { in: ids }, categories: { some: { id: target.categoryId } } },
+        data: { subcategoryId },
+      });
+      return NextResponse.json({ updated: result.count, skipped: ids.length - result.count });
+    }
+    const result = await prisma.product.updateMany({ where: { id: { in: ids } }, data: { subcategoryId: null } });
+    return NextResponse.json({ updated: result.count, skipped: 0 });
+  }
 
   if (action !== "delete") {
     const result = await prisma.product.updateMany({

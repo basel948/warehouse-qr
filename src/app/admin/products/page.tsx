@@ -5,7 +5,6 @@ import { ImageUploadField } from "@/components/image-upload-field";
 import { ActionsMenu } from "./actions-menu";
 import { CategoryList } from "./category-list";
 import { ProductOrderSection } from "./product-order-list";
-import { SubcategoryList } from "./subcategory-list";
 import { ChevronDownIcon, DuplicateIcon, EditIcon, PackageIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 import { useConfirm } from "@/components/confirm-dialog";
@@ -136,9 +135,6 @@ export default function AdminProductsPage() {
   const [categoryError, setCategoryError] = useState<string | null>(null);
   const [imageCategoryId, setImageCategoryId] = useState("");
 
-  const [subcatManagerCategoryId, setSubcatManagerCategoryId] = useState("");
-  const [newSubcategoryName, setNewSubcategoryName] = useState("");
-  const [subcategoryError, setSubcategoryError] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [addOpen, setAddOpen] = useState(false);
@@ -264,40 +260,23 @@ export default function AdminProductsPage() {
     loadAll();
   }
 
-  const subcategoriesForManager = subcategories.filter(
-    (subcategory) => subcategory.categoryId === subcatManagerCategoryId
-  );
 
-  async function addSubcategory(e: React.FormEvent) {
-    e.preventDefault();
-    setSubcategoryError(null);
-
-    if (!subcatManagerCategoryId) {
-      setSubcategoryError(t("admin.products.subcategoryCategoryRequired"));
-      return;
-    }
-    if (!newSubcategoryName.trim()) {
-      setSubcategoryError(t("admin.products.subcategoryNameRequired"));
-      return;
-    }
-
+  // Adds a subcategory at the end of its category's list. Returns an error
+  // message to show, or null on success.
+  async function addSubcategory(categoryId: string, name: string): Promise<string | null> {
+    if (!name.trim()) return t("admin.products.subcategoryNameRequired");
     const res = await fetch("/api/subcategories", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        name: newSubcategoryName.trim(),
-        categoryId: subcatManagerCategoryId,
-        order: subcategoriesForManager.length,
+        name: name.trim(),
+        categoryId,
+        order: subcategories.filter((subcategory) => subcategory.categoryId === categoryId).length,
       }),
     });
-
-    if (!res.ok) {
-      setSubcategoryError(t("admin.products.subcategoryError"));
-      return;
-    }
-
-    setNewSubcategoryName("");
-    loadAll();
+    if (!res.ok) return t("admin.products.subcategoryError");
+    loadAll({ quiet: true });
+    return null;
   }
 
   // Saves a new subcategory order after a drag (within the chosen category):
@@ -694,61 +673,24 @@ export default function AdminProductsPage() {
         </button>
         {subcatsOpen && (
           <div className="px-[18px] pb-[18px]">
-          <select
-            value={subcatManagerCategoryId}
-            onChange={(e) => setSubcatManagerCategoryId(e.target.value)}
-            className="border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5 mb-3 w-full sm:w-auto"
-          >
-            <option value="">{t("admin.products.subcategoryManagerPlaceholder")}</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-              </option>
-            ))}
-          </select>
-
-          {subcatManagerCategoryId && (
-            <>
-              <form onSubmit={addSubcategory} className="flex gap-2 mb-3">
-                <input
-                  type="text"
-                  placeholder={t("admin.products.newSubcategoryPlaceholder")}
-                  value={newSubcategoryName}
-                  onChange={(e) => setNewSubcategoryName(e.target.value)}
-                  className="flex-1 min-w-0 border border-[#e6e0d6] bg-white rounded-[10px] px-3.5 py-2.5"
-                />
-                <button
-                  type="submit"
-                  className="bg-[var(--accent)] text-white rounded-[10px] px-4 py-2.5 text-sm font-semibold"
-                >
-                  {t("admin.products.add")}
-                </button>
-              </form>
-              {subcategoryError && <p className="text-sm text-[#b3402e] mb-3">{subcategoryError}</p>}
-
-              <SubcategoryList
-                subcategories={subcategoriesForManager}
-                productCounts={Object.fromEntries(
-                  subcategoriesForManager.map((subcategory) => [
-                    subcategory.id,
-                    products.filter((product) => product.subcategoryId === subcategory.id).length,
-                  ])
-                )}
-                onReorder={saveSubcategoryOrder}
-                onDelete={deleteSubcategory}
-              />
-            </>
-          )}
+            {/* Everything for subcategories in one place: add, delete, drag to
+                reorder, and open one to arrange its products. */}
+            <ProductOrderSection
+              categories={categories}
+              subcategories={subcategories}
+              products={products}
+              onSaved={() => loadAll({ quiet: true })}
+              onReorderSubcategories={(orderedIds) =>
+                saveSubcategoryOrder(
+                  orderedIds.flatMap((id) => subcategories.filter((subcategory) => subcategory.id === id))
+                )
+              }
+              onAddSubcategory={addSubcategory}
+              onDeleteSubcategory={deleteSubcategory}
+            />
           </div>
         )}
       </div>
-
-      <ProductOrderSection
-        categories={categories}
-        subcategories={subcategories}
-        products={products}
-        onSaved={() => loadAll({ quiet: true })}
-      />
 
       <div>
         <h1 className="text-xl font-bold text-[#1a1714] mb-4">
