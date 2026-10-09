@@ -6,6 +6,7 @@ import { ImageUploadField } from "@/components/image-upload-field";
 import { ActionsMenu } from "./actions-menu";
 import { CategoryList } from "./category-list";
 import { UnitStockFields, parseStockInput } from "./unit-stock-fields";
+import { VariantOptionsSection } from "./variant-options-section";
 import { ProductOrderSection } from "./product-order-list";
 import { ChevronDownIcon, DuplicateIcon, EditIcon, PackageIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
@@ -44,6 +45,9 @@ type Product = {
   categories: Category[];
   subcategoryId: string | null;
   subcategory: Subcategory | null;
+  variantGroup: { id: string; name: string } | null;
+  variantLabel: string | null;
+  variantOrder: number;
 };
 
 function CategoryMultiSelect({
@@ -155,6 +159,9 @@ export default function AdminProductsPage() {
   const [subcatsOpen, setSubcatsOpen] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editVariantLabel, setEditVariantLabel] = useState("");
+  // Product to open in the edit window once it's in the (re)loaded list.
+  const [pendingEditId, setPendingEditId] = useState<string | null>(null);
   const [editCategoryIds, setEditCategoryIds] = useState<string[]>([]);
   const [editSubcategoryId, setEditSubcategoryId] = useState("");
   const [editName, setEditName] = useState("");
@@ -193,6 +200,16 @@ export default function AdminProductsPage() {
   useEffect(() => {
     loadAll();
   }, []);
+
+  useEffect(() => {
+    if (!pendingEditId) return;
+    const product = products.find((p) => p.id === pendingEditId);
+    if (product) {
+      setPendingEditId(null);
+      startEdit(product);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, pendingEditId]);
 
   async function addCategory(e: React.FormEvent) {
     e.preventDefault();
@@ -420,6 +437,7 @@ export default function AdminProductsPage() {
     setEditPrice(String(product.price));
     setEditUnit(product.unit);
     setEditStock(product.stockQuantity != null ? String(product.stockQuantity) : "");
+    setEditVariantLabel(product.variantLabel ?? "");
     setEditImageUrl(product.imageUrl ?? "");
     setEditOnSale(product.onSale);
     setEditSaleMode("amount");
@@ -497,6 +515,10 @@ export default function AdminProductsPage() {
         categoryIds: editCategoryIds,
         unit: editUnit,
         stockQuantity: parsedStock,
+        // Only for an option on a card; empty falls back to the product name.
+        ...(products.find((p) => p.id === productId)?.variantGroup
+          ? { variantLabel: editVariantLabel.trim() || null }
+          : {}),
         // A subcategory only makes sense under one of the product's categories.
         subcategoryId: subcategories.some(
           (s) => s.id === editSubcategoryId && editCategoryIds.includes(s.categoryId)
@@ -945,6 +967,14 @@ export default function AdminProductsPage() {
                           {t("admin.products.lowStockBadge")}
                         </span>
                       )}
+                      {product.variantGroup && (
+                        <span className="text-xs font-semibold rounded-full px-2.5 py-1 bg-[#eef2fb] text-[#33508f] max-w-[180px] truncate">
+                          {t("admin.variants.badge", {
+                            card: product.variantGroup.name,
+                            label: product.variantLabel || product.name,
+                          })}
+                        </span>
+                      )}
                     </div>
                   </div>
 
@@ -1059,6 +1089,15 @@ export default function AdminProductsPage() {
                 onUnitChange={setEditUnit}
                 stock={editStock}
                 onStockChange={setEditStock}
+              />
+              <VariantOptionsSection
+                key={editingProduct.id}
+                product={editingProduct}
+                allProducts={products}
+                label={editVariantLabel}
+                onLabelChange={setEditVariantLabel}
+                onChanged={() => loadAll({ quiet: true })}
+                onOpenProduct={setPendingEditId}
               />
               <div className="flex items-center gap-2 flex-wrap">
                 <label className="flex items-center gap-1.5 text-sm text-[#4a443c]">

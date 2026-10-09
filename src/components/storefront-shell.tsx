@@ -19,9 +19,9 @@ import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
 import { WAREHOUSE_CONTACT_PHONE, WAREHOUSE_NAME } from "@/lib/branding";
 import { PAYMENT_METHOD, type PaymentMethod } from "@/lib/payment-method";
-import { type Product, ProductCard, ProductDetailModal } from "@/components/catalog-ui";
+import { type Product, ProductDetailModal, ShopCard, groupIntoCards } from "@/components/catalog-ui";
 import { getEffectivePrice } from "@/lib/effective-price";
-import { VAT_PERCENT, calculateOrderTotals } from "@/lib/order-totals";
+import { VAT_PERCENT, bestCouponFor, calculateOrderTotals, type CouponRule } from "@/lib/order-totals";
 
 const CART_STORAGE_KEY = "warehouse-cart";
 
@@ -172,7 +172,12 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
     if (!isSearching || !allProducts) return [];
     const query = searchQuery.trim().toLowerCase();
     return allProducts
-      .filter((product) => product.name.toLowerCase().includes(query))
+      // A card's options also match on the card's name ("מזלג" finds every colour).
+      .filter(
+        (product) =>
+          product.name.toLowerCase().includes(query) ||
+          (product.variantGroup?.name.toLowerCase().includes(query) ?? false)
+      )
       .sort(compareProductNames);
   }, [allProducts, searchQuery, isSearching]);
 
@@ -219,14 +224,14 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
           {isSearching ? (
             <>
               <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
-                {searchResults.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    quantity={cart[product.id] ?? 0}
-                    onAdd={() => addToCart(product.id)}
-                    onSetQuantity={(qty) => setQuantity(product.id, qty)}
-                    onExpand={() => setExpandedProduct(product)}
+                {groupIntoCards(searchResults).map((card) => (
+                  <ShopCard
+                    key={card.key}
+                    options={card.options}
+                    cart={cart}
+                    onAdd={addToCart}
+                    onSetQuantity={setQuantity}
+                    onExpand={setExpandedProduct}
                   />
                 ))}
               </div>
@@ -323,6 +328,14 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
             onAdd={() => addToCart(expandedProduct.id)}
             onSetQuantity={(qty) => setQuantity(expandedProduct.id, qty)}
             onClose={() => setExpandedProduct(null)}
+            options={
+              expandedProduct.variantGroup
+                ? (allProducts ?? [])
+                    .filter((p) => p.variantGroup?.id === expandedProduct.variantGroup?.id)
+                    .sort((a, b) => a.variantOrder - b.variantOrder)
+                : []
+            }
+            onSelectOption={setExpandedProduct}
           />
         )}
 
@@ -356,7 +369,8 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-type AppliedCoupon = { code: string; discountPercent: number };
+// categoryNames: for the tag and messages; empty = a whole-order coupon.
+type AppliedCoupon = CouponRule & { categoryNames: string[] };
 
 function CheckoutSheet({
   products,
@@ -390,7 +404,7 @@ function CheckoutSheet({
   // only shows a notice and never selects it (the orders API rejects it too).
   const [creditNoticeShown, setCreditNoticeShown] = useState(false);
   const [couponInput, setCouponInput] = useState("");
-  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+  const [appliedCoupons, setAppliedCoupons] = useState<AppliedCoupon[]>([]);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -405,17 +419,38 @@ function CheckoutSheet({
     .filter((product) => cart[product.id] > 0)
     .map((product) => ({ product, quantity: cart[product.id] }));
 
-  // Prices are before VAT; the buyer pays the total including VAT.
-  const { discountAmount, totalBeforeVat, vatAmount, total } = calculateOrderTotals(
-    subtotal,
-    appliedCoupon?.discountPercent,
-    VAT_PERCENT
-  );
+  // Each item gets the biggest applied coupon covering it (the orders API
+  // re-derives the same server-side). Prices are before VAT; the buyer pays
+  // the total including VAT.
+  function totalsWith(coupons: CouponRule[]) {
+    return calculateOrderTotals(
+      lines.map(({ product, quantity }) => {
+        const coupon = bestCouponFor(
+          product.categories.map((c) => c.id),
+          coupons
+        );
+        return {
+          price: getEffectivePrice(product),
+          quantity,
+          couponCode: coupon?.code,
+          discountPercent: coupon?.discountPercent,
+        };
+      }),
+      null,
+      VAT_PERCENT
+    );
+  }
+  const { discounts, totalBeforeVat, vatAmount, total } = totalsWith(appliedCoupons);
 
   async function applyCoupon() {
     setCouponError(null);
     if (!couponInput.trim()) {
       setCouponError(t("checkout.couponErrorEmpty"));
+      return;
+    }
+
+    if (appliedCoupons.some((c) => c.code === couponInput.trim().toUpperCase())) {
+      setCouponError(t("checkout.couponErrorDuplicate"));
       return;
     }
 
@@ -428,11 +463,27 @@ function CheckoutSheet({
       });
       const data = await res.json();
       if (!res.ok) {
-        setAppliedCoupon(null);
         setCouponError(t("checkout.couponErrorInvalid"));
         return;
       }
-      setAppliedCoupon({ code: data.code, discountPercent: data.discountPercent });
+      const coupon: AppliedCoupon = {
+        code: data.code,
+        discountPercent: data.discountPercent,
+        categoryIds: data.categoryIds ?? [],
+        categoryNames: data.categoryNames ?? [],
+      };
+      if (!totalsWith([coupon]).discounts.length) {
+        // A category coupon with none of its categories in the cart.
+        setCouponError(t("checkout.couponErrorNoItems", { categories: coupon.categoryNames.join(", ") }));
+        return;
+      }
+      if (!totalsWith([...appliedCoupons, coupon]).discounts.some((d) => d.code === coupon.code)) {
+        // Every item it covers already has an equal or bigger coupon.
+        setCouponError(t("checkout.couponErrorNoBetter"));
+        return;
+      }
+      setAppliedCoupons([...appliedCoupons, coupon]);
+      setCouponInput("");
     } catch {
       setCouponError(t("checkout.couponErrorNetwork"));
     } finally {
@@ -443,12 +494,11 @@ function CheckoutSheet({
   // Pay-later is only offered with a coupon applied, so drop it as the chosen
   // method whenever the coupon goes away (removed, or replaced by an invalid one).
   useEffect(() => {
-    if (!appliedCoupon && paymentMethod === PAYMENT_METHOD.PAY_LATER) setPaymentMethod(null);
-  }, [appliedCoupon, paymentMethod]);
+    if (appliedCoupons.length === 0 && paymentMethod === PAYMENT_METHOD.PAY_LATER) setPaymentMethod(null);
+  }, [appliedCoupons, paymentMethod]);
 
-  function removeCoupon() {
-    setAppliedCoupon(null);
-    setCouponInput("");
+  function removeCoupon(code: string) {
+    setAppliedCoupons(appliedCoupons.filter((c) => c.code !== code));
     setCouponError(null);
   }
 
@@ -480,7 +530,7 @@ function CheckoutSheet({
           businessName,
           customerPhone,
           paymentMethod,
-          couponCode: appliedCoupon?.code,
+          couponCodes: appliedCoupons.map((c) => c.code),
           items: lines.map((line) => ({
             productId: line.product.id,
             quantity: line.quantity,
@@ -570,29 +620,41 @@ function CheckoutSheet({
             </div>
 
             <div className="mb-4">
-              {appliedCoupon ? (
-                <div className="flex items-center justify-between bg-[#f1f7f1] border border-[#cfe3cf] rounded-xl px-3.5 py-[11px]">
-                  <span className="text-sm font-semibold text-[#2f6b3a]">
-                    {t("checkout.couponApplied", {
-                      code: appliedCoupon.code,
-                      percent: appliedCoupon.discountPercent,
-                    })}
-                  </span>
-                  <button
-                    onClick={removeCoupon}
-                    className="text-sm text-[#2f6b3a] underline"
-                  >
-                    {t("checkout.remove")}
-                  </button>
+              {appliedCoupons.length > 0 && (
+                <div className="flex flex-col gap-1.5 mb-2">
+                  {appliedCoupons.map((coupon) => (
+                    <div
+                      key={coupon.code}
+                      className="flex items-center justify-between gap-2 bg-[#f1f7f1] border border-[#cfe3cf] rounded-xl px-3.5 py-[9px]"
+                    >
+                      <span className="text-sm font-semibold text-[#2f6b3a] min-w-0">
+                        {t("checkout.couponApplied", { code: coupon.code, percent: coupon.discountPercent })}
+                        <span className="block text-xs font-medium text-[#4f7d57]">
+                          {coupon.categoryNames.length > 0
+                            ? t("checkout.couponOnlyFor", { categories: coupon.categoryNames.join(", ") })
+                            : t("checkout.couponWholeOrder")}
+                        </span>
+                      </span>
+                      <button
+                        onClick={() => removeCoupon(coupon.code)}
+                        aria-label={t("checkout.remove")}
+                        className="w-7 h-7 shrink-0 rounded-full text-[#2f6b3a] hover:bg-[#e2efe2] flex items-center justify-center text-base"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              ) : (
-                <div className="flex gap-2">
+              )}
+              <div className="flex gap-2">
                   <input
                     type="text"
-                    placeholder={t("checkout.couponPlaceholder")}
+                    placeholder={
+                      appliedCoupons.length > 0 ? t("checkout.couponPlaceholderAnother") : t("checkout.couponPlaceholder")
+                    }
                     value={couponInput}
                     onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                    className="flex-1 border border-[#e6e0d6] rounded-xl px-3.5 py-[11px] bg-[#f7f5f1] uppercase placeholder:normal-case placeholder:text-[#a39a8e]"
+                    className="flex-1 min-w-0 border border-[#e6e0d6] rounded-xl px-3.5 py-[11px] bg-[#f7f5f1] uppercase placeholder:normal-case placeholder:text-[#a39a8e]"
                   />
                   <button
                     onClick={applyCoupon}
@@ -602,21 +664,22 @@ function CheckoutSheet({
                     {validatingCoupon ? t("checkout.checking") : t("checkout.apply")}
                   </button>
                 </div>
-              )}
               {couponError && <p className="text-[13px] text-[#b3402e] mt-1">{couponError}</p>}
             </div>
 
             <div className="mb-4 space-y-[7px] text-sm">
-              {appliedCoupon && (
+              {discounts.length > 0 && (
                 <>
                   <div className="flex items-center justify-between text-[#6b6259]">
                     <span>{t("checkout.subtotal")}</span>
                     <span>₪{subtotal.toFixed(2)}</span>
                   </div>
-                  <div className="flex items-center justify-between text-[#2f6b3a]">
-                    <span>{t("checkout.discount", { percent: appliedCoupon.discountPercent })}</span>
-                    <span>-₪{discountAmount.toFixed(2)}</span>
-                  </div>
+                  {discounts.map((discount) => (
+                    <div key={discount.code} className="flex items-center justify-between text-[#2f6b3a]">
+                      <span>{t("checkout.couponDiscount", { code: discount.code, percent: discount.percent })}</span>
+                      <span>-₪{discount.amount.toFixed(2)}</span>
+                    </div>
+                  ))}
                 </>
               )}
               <div className="flex items-center justify-between text-[#6b6259]">
@@ -666,7 +729,7 @@ function CheckoutSheet({
               <p className="text-[13px] font-semibold text-[#6b6259] mb-2">
                 {t("checkout.paymentMethodLabel")}
               </p>
-              <div className={`grid gap-2 ${appliedCoupon ? "grid-cols-3" : "grid-cols-2"}`}>
+              <div className={`grid gap-2 ${appliedCoupons.length > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
                 <PaymentMethodButton
                   active={paymentMethod === PAYMENT_METHOD.CASH}
                   icon={<CashIcon className="w-5 h-5" />}
@@ -682,7 +745,7 @@ function CheckoutSheet({
                   label={t("checkout.paymentCredit")}
                   onClick={() => setCreditNoticeShown(true)}
                 />
-                {appliedCoupon && (
+                {appliedCoupons.length > 0 && (
                   <PaymentMethodButton
                     active={paymentMethod === PAYMENT_METHOD.PAY_LATER}
                     icon={<ClockIcon className="w-5 h-5" />}

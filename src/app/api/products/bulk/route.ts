@@ -3,10 +3,11 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { deleteEmptyVariantGroups } from "@/lib/variant-groups";
 
 const bulkSchema = z.object({
   productIds: z.array(z.string().min(1)).min(1).max(1000),
-  action: z.enum(["inStock", "outOfStock", "delete", "subcategory"]),
+  action: z.enum(["inStock", "outOfStock", "delete", "subcategory", "unmerge"]),
   // For "subcategory": the target, or null for no subcategory ("other").
   subcategoryId: z.string().min(1).nullable().optional(),
 });
@@ -45,6 +46,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ updated: result.count, skipped: 0 });
   }
 
+  // Takes the products off their cards (each becomes its own card again).
+  if (action === "unmerge") {
+    const result = await prisma.product.updateMany({
+      where: { id: { in: ids }, variantGroupId: { not: null } },
+      data: { variantGroupId: null, variantLabel: null, variantOrder: 0 },
+    });
+    await deleteEmptyVariantGroups();
+    return NextResponse.json({ updated: result.count, skipped: 0 });
+  }
+
   if (action !== "delete") {
     const result = await prisma.product.updateMany({
       where: { id: { in: ids } },
@@ -61,5 +72,6 @@ export async function POST(request: Request) {
   const keep = new Set(ordered.map((item) => item.productId));
   const deletable = ids.filter((id) => !keep.has(id));
   const result = await prisma.product.deleteMany({ where: { id: { in: deletable } } });
+  await deleteEmptyVariantGroups();
   return NextResponse.json({ updated: result.count, skipped: keep.size });
 }

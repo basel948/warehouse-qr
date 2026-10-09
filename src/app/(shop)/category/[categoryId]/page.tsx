@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { toPublicProduct } from "@/lib/public-product";
 import { CategorySections } from "./category-sections";
+import { PRODUCT_INCLUDE } from "@/lib/variant-groups";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export default async function CategoryPage({
     where: { categories: { some: { id: category.id } } },
     // The admin's arrangement ("arrange products"); name breaks ties.
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    include: { categories: true, subcategory: true },
+    include: PRODUCT_INCLUDE,
   });
 
   return (

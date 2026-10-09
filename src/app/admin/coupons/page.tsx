@@ -10,7 +10,11 @@ type Coupon = {
   discountPercent: number;
   active: boolean;
   createdAt: string;
+  /** Empty = applies to the whole order. */
+  categories: { id: string; name: string }[];
 };
+
+type Category = { id: string; name: string };
 
 export default function AdminCouponsPage() {
   const { t } = useLocale();
@@ -20,6 +24,9 @@ export default function AdminCouponsPage() {
 
   const [code, setCode] = useState("");
   const [discountPercent, setDiscountPercent] = useState("10");
+  const [categories, setCategories] = useState<Category[]>([]);
+  // Empty = whole order.
+  const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   async function loadCoupons() {
@@ -31,7 +38,15 @@ export default function AdminCouponsPage() {
 
   useEffect(() => {
     loadCoupons();
+    fetch("/api/categories")
+      .then((res) => res.json())
+      .then(setCategories)
+      .catch(() => {});
   }, []);
+
+  function toggleCategory(id: string) {
+    setCategoryIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  }
 
   async function addCoupon(e: React.FormEvent) {
     e.preventDefault();
@@ -50,7 +65,7 @@ export default function AdminCouponsPage() {
     const res = await fetch("/api/coupons", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: code.trim(), discountPercent: parsedPercent }),
+      body: JSON.stringify({ code: code.trim(), discountPercent: parsedPercent, categoryIds }),
     });
 
     if (!res.ok) {
@@ -60,6 +75,7 @@ export default function AdminCouponsPage() {
 
     setCode("");
     setDiscountPercent("10");
+    setCategoryIds([]);
     loadCoupons();
   }
 
@@ -89,7 +105,7 @@ export default function AdminCouponsPage() {
 
         <form
           onSubmit={addCoupon}
-          className="bg-white border border-[#eae5dc] rounded-[14px] p-[18px] flex flex-col sm:flex-row gap-2.5 sm:items-center mb-6"
+          className="bg-white border border-[#eae5dc] rounded-[14px] p-[18px] flex flex-col sm:flex-row sm:flex-wrap gap-2.5 sm:items-center mb-6"
         >
           <input
             type="text"
@@ -117,6 +133,36 @@ export default function AdminCouponsPage() {
           >
             {t("admin.coupons.addCoupon")}
           </button>
+          <div className="sm:basis-full">
+            <p className="text-[13px] font-semibold text-[#6b6259] mb-1.5">{t("admin.coupons.appliesTo")}</p>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setCategoryIds([])}
+                className={`rounded-full px-3 py-1.5 text-[13px] font-semibold border ${
+                  categoryIds.length === 0
+                    ? "bg-[#1a1714] text-white border-[#1a1714]"
+                    : "bg-white text-[#4a443c] border-[#e6e0d6]"
+                }`}
+              >
+                {t("admin.coupons.wholeOrder")}
+              </button>
+              {categories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  onClick={() => toggleCategory(category.id)}
+                  className={`rounded-full px-3 py-1.5 text-[13px] font-semibold border ${
+                    categoryIds.includes(category.id)
+                      ? "bg-[var(--accent)] text-white border-[var(--accent)]"
+                      : "bg-white text-[#4a443c] border-[#e6e0d6]"
+                  }`}
+                >
+                  {category.name}
+                </button>
+              ))}
+            </div>
+          </div>
           {error && <p className="text-sm text-[#b3402e] sm:basis-full">{error}</p>}
         </form>
 
@@ -134,6 +180,11 @@ export default function AdminCouponsPage() {
                   </span>
                   <span className="text-[13px] text-[#6b6259]">
                     {t("admin.coupons.percentOff", { percent: coupon.discountPercent })}
+                  </span>
+                  <span className="text-xs font-medium rounded-full px-2.5 py-1 bg-[#f7f5f1] text-[#4a443c]">
+                    {coupon.categories.length > 0
+                      ? t("admin.coupons.onlyFor", { categories: coupon.categories.map((c) => c.name).join(", ") })
+                      : t("admin.coupons.wholeOrder")}
                   </span>
                 </div>
                 <div className="flex items-center gap-3 shrink-0">

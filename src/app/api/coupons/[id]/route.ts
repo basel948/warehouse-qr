@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 const updateCouponSchema = z.object({
   active: z.boolean().optional(),
   discountPercent: z.number().int().min(1).max(100).optional(),
+  categoryIds: z.array(z.string().min(1)).max(100).optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
@@ -20,9 +21,14 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
+  const { categoryIds, ...rest } = parsed.data;
   const coupon = await prisma.coupon.update({
     where: { id: params.id },
-    data: parsed.data,
+    data: {
+      ...rest,
+      categories: categoryIds ? { set: categoryIds.map((id) => ({ id })) } : undefined,
+    },
+    include: { categories: { select: { id: true, name: true } } },
   });
   return NextResponse.json(coupon);
 }

@@ -5,7 +5,7 @@ import { PageBackLink } from "@/components/page-back-link";
 import { ProductFilterBar } from "@/components/product-filter-bar";
 import { useLocale } from "@/components/locale-provider";
 import { useCart } from "@/components/storefront-shell";
-import { type Product, ProductCard } from "@/components/catalog-ui";
+import { type Product, type ShopCardItem, ShopCard, groupIntoCards } from "@/components/catalog-ui";
 import { useProductFilters } from "@/lib/use-product-filters";
 
 const OTHER_SECTION_ID = "other";
@@ -48,16 +48,17 @@ export function CategorySections({
       bySubcategory.get(key)!.push(product);
     }
 
-    const ordered: { id: string; name: string; products: Product[] }[] = [];
+    // Options of one card are grouped within their section.
+    const ordered: { id: string; name: string; cards: ShopCardItem[] }[] = [];
     for (const subcategory of subcategories) {
       const list = bySubcategory.get(subcategory.id);
       if (list && list.length > 0) {
-        ordered.push({ id: subcategory.id, name: subcategory.name, products: list });
+        ordered.push({ id: subcategory.id, name: subcategory.name, cards: groupIntoCards(list) });
       }
     }
     const otherList = bySubcategory.get(OTHER_SECTION_ID);
     if (otherList && otherList.length > 0) {
-      ordered.push({ id: OTHER_SECTION_ID, name: t("catalog.otherCategory"), products: otherList });
+      ordered.push({ id: OTHER_SECTION_ID, name: t("catalog.otherCategory"), cards: groupIntoCards(otherList) });
     }
     return ordered;
   }, [sorted, subcategories, t]);
@@ -211,7 +212,7 @@ export function CategorySections({
                   >
                     {section.name}
                     <span className={`ms-1.5 text-[11px] font-medium ${active ? "text-white/80" : "text-[#a39a8e]"}`}>
-                      {section.products.length}
+                      {section.cards.length}
                     </span>
                   </a>
                 );
@@ -242,14 +243,14 @@ export function CategorySections({
                   <div className="flex-1 h-px bg-[#eae5dc]" />
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2.5">
-                  {section.products.map((product) => (
-                    <ProductCard
-                      key={product.id}
-                      product={product}
-                      quantity={cart[product.id] ?? 0}
-                      onAdd={() => addToCart(product.id)}
-                      onSetQuantity={(qty) => setQuantity(product.id, qty)}
-                      onExpand={() => openProductDetail(product)}
+                  {section.cards.map((card) => (
+                    <ShopCard
+                      key={card.key}
+                      options={card.options}
+                      cart={cart}
+                      onAdd={addToCart}
+                      onSetQuantity={setQuantity}
+                      onExpand={openProductDetail}
                     />
                   ))}
                 </div>

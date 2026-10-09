@@ -13,6 +13,8 @@ type OrderItem = {
   id: string;
   quantity: number;
   price: number;
+  couponCode: string | null;
+  discountPercent: number | null;
   product: { name: string; unit: string };
 };
 
@@ -148,12 +150,7 @@ export default function AdminOrdersPage() {
 
       <ul className="space-y-3.5">
         {visibleOrders.map((order) => {
-          const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-          const { discountAmount, vatPercent, vatAmount, total } = calculateOrderTotals(
-            subtotal,
-            order.discountPercent,
-            order.vatPercent
-          );
+          const { discounts, vatPercent, vatAmount, total } = calculateOrderTotals(order.items, order, order.vatPercent);
           return (
             <li key={order.id} className="bg-white border border-[#eae5dc] rounded-[14px] p-[18px]">
               <div className="flex items-start justify-between gap-4 mb-3.5">
@@ -217,20 +214,24 @@ export default function AdminOrdersPage() {
                         price: item.price.toFixed(2),
                         per: t(`catalog.perUnit.${asProductUnit(item.product.unit)}`),
                       })}
+                      {item.discountPercent ? (
+                        <span className="text-[#2f6b3a]">
+                          {" · "}
+                          {item.couponCode} ‎-{item.discountPercent}%
+                        </span>
+                      ) : null}
                     </span>
                   </div>
                 ))}
-                {order.couponCode && (
-                  <div className="flex items-center justify-between text-[#2f6b3a]">
-                    <span>
-                      {t("admin.orders.couponLine", {
-                        code: order.couponCode,
-                        percent: order.discountPercent ?? 0,
-                      })}
-                    </span>
-                    <span>-₪{discountAmount.toFixed(2)}</span>
+                {discounts.map((discount) => (
+                  <div
+                    key={`${discount.code}-${discount.percent}`}
+                    className="flex items-center justify-between text-[#2f6b3a]"
+                  >
+                    <span>{t("admin.orders.couponLine", { code: discount.code, percent: discount.percent })}</span>
+                    <span>-₪{discount.amount.toFixed(2)}</span>
                   </div>
-                )}
+                ))}
                 {vatPercent ? (
                   <div className="flex items-center justify-between text-[#6b6259]">
                     <span>{t("admin.orders.vatLine", { percent: vatPercent })}</span>

@@ -42,6 +42,7 @@ model Category {
   createdAt     DateTime      @default(now())
   products      Product[]
   subcategories Subcategory[]
+  coupons       Coupon[]      @relation("CouponCategories")
 }
 
 model Subcategory {
@@ -74,6 +75,14 @@ model Product {
   // Orders reduce it; cancelling an order puts it back; at 0 the product
   // turns out of stock.
   stockQuantity Int?
+  // Options shown as one card in the shop (e.g. a fork in 3 colours, a cup in
+  // 6 sizes): each option is still its own product (own price, stock, photo),
+  // linked to a shared VariantGroup. variantLabel is the option's name on the
+  // card ("שחור", "8OZ"); variantOrder its place among the options.
+  variantGroupId String?
+  variantGroup   VariantGroup? @relation(fields: [variantGroupId], references: [id], onDelete: SetNull)
+  variantLabel   String?
+  variantOrder   Int           @default(0)
   salePrice     Float?
   saleBannerImageUrl String?
   categories    Category[]
@@ -84,12 +93,24 @@ model Product {
   orderItems    OrderItem[]
 }
 
+// One shop card holding several products as options. Its name is the card's
+// title; the photo is the chosen option's (or the first option with one).
+model VariantGroup {
+  id        String    @id @default(cuid())
+  name      String
+  createdAt DateTime  @default(now())
+  products  Product[]
+}
+
 model Coupon {
   id              String   @id @default(cuid())
   code            String   @unique
   discountPercent Int
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
+  // Empty = the coupon applies to the whole order; otherwise only to products
+  // in one of these categories.
+  categories      Category[] @relation("CouponCategories")
 }
 
 model Order {
@@ -103,6 +124,10 @@ model Order {
   whatsappSentAt  DateTime?
   buyerWhatsappSentAt DateTime?
   emailSentAt     DateTime?
+  // Since multiple coupons per order: the codes that discounted something,
+  // joined with ", " (for display); the discount itself is per item
+  // (OrderItem.discountPercent) and discountPercent here stays null. Orders
+  // from before that have one code and an order-wide discountPercent.
   couponCode      String?
   discountPercent Int?
   // VAT (מע"מ) rate charged on top of the prices, as a snapshot like
@@ -124,4 +149,8 @@ model OrderItem {
   // cancelled order returns exactly what it took (and orders from before stock
   // tracking return nothing).
   stockDeducted Boolean @default(false)
+  // Snapshot of the coupon that discounted this line (the biggest one that
+  // covered it), or null. Null on orders from before per-item coupons.
+  couponCode      String?
+  discountPercent Int?
 }

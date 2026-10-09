@@ -11,7 +11,7 @@ import { getEffectivePrice } from "@/lib/effective-price";
 import { CHECKOUT_LIMITS } from "@/lib/checkout-limits";
 import { isValidIsraeliPhone, normalizeIsraeliPhone } from "@/lib/phone";
 import { clientIp, recordHit, retryAfterSeconds } from "@/lib/rate-limit";
-import { VAT_PERCENT, calculateOrderTotals } from "@/lib/order-totals";
+import { VAT_PERCENT, bestCouponFor, calculateOrderTotals, type CouponRule } from "@/lib/order-totals";
 import { deductStock, quantitiesByProduct, type StockShortage } from "@/lib/stock";
 
 // Paused on the owner's request while the WhatsApp Business number/template
@@ -48,6 +48,9 @@ const createOrderSchema = z.object({
     PAYMENT_METHOD.CREDIT,
     PAYMENT_METHOD.PAY_LATER,
   ]),
+  // Several coupons may be applied; `couponCode` (one) is what checkout sent
+  // before that, still accepted from a page loaded before the update.
+  couponCodes: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
   couponCode: z.string().trim().min(1).max(40).optional(),
   items: z
     .array(
@@ -71,7 +74,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
   }
 
-  const { customerName, businessName, customerPhone, paymentMethod, couponCode, items } = parsed.data;
+  const { customerName, businessName, customerPhone, paymentMethod, couponCode, couponCodes, items } = parsed.data;
 
   if (!isValidIsraeliPhone(customerPhone)) {
     return NextResponse.json({ error: "invalid_phone" }, { status: 400 });
@@ -90,6 +93,7 @@ export async function POST(request: Request) {
   const productIds = items.map((item) => item.productId);
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
+    include: { categories: { select: { id: true } } },
   });
 
   if (products.length !== productIds.length) {
@@ -106,18 +110,34 @@ export async function POST(request: Request) {
     );
   }
 
-  let discountPercent: number | null = null;
-  let appliedCouponCode: string | null = null;
-  if (couponCode) {
+  // The checkout's coupon preview isn't trusted: each code is looked up again
+  // and every item's discount re-derived here (best covering coupon, no stacking).
+  const codes = Array.from(
+    new Set([...(couponCodes ?? []), ...(couponCode ? [couponCode] : [])].map((c) => c.trim().toUpperCase()))
+  );
+  const coupons: CouponRule[] = [];
+  for (const code of codes) {
     const coupon = await prisma.coupon.findUnique({
-      where: { code: couponCode.trim().toUpperCase() },
+      where: { code },
+      include: { categories: { select: { id: true } } },
     });
     if (!coupon || !coupon.active) {
-      return NextResponse.json({ error: "Invalid or expired coupon code" }, { status: 400 });
+      return NextResponse.json({ error: "Invalid or expired coupon code", code }, { status: 400 });
     }
-    discountPercent = coupon.discountPercent;
-    appliedCouponCode = coupon.code;
+    coupons.push({
+      code: coupon.code,
+      discountPercent: coupon.discountPercent,
+      categoryIds: coupon.categories.map((c) => c.id),
+    });
   }
+  const couponByProduct = new Map(
+    products.map((product) => [product.id, bestCouponFor(product.categories.map((c) => c.id), coupons)])
+  );
+  // Only coupons that actually discounted an item count (and get recorded).
+  const usedCodes = coupons
+    .map((c) => c.code)
+    .filter((code) => Array.from(couponByProduct.values()).some((c) => c?.code === code));
+  const appliedCouponCode = usedCodes.length > 0 ? usedCodes.join(", ") : null;
   // Card payment isn't connected to a payment provider yet, so nothing would
   // actually be charged (yet a "paid" receipt would go out). The checkout UI
   // only shows a "not available yet" notice; this blocks direct requests.
@@ -149,7 +169,6 @@ export async function POST(request: Request) {
           customerPhone,
           paymentMethod,
           couponCode: appliedCouponCode,
-          discountPercent,
           vatPercent: VAT_PERCENT,
           items: {
             create: items.map((item) => ({
@@ -157,6 +176,8 @@ export async function POST(request: Request) {
               quantity: item.quantity,
               price: getEffectivePrice(productById.get(item.productId)!),
               stockDeducted: stock.deducted.has(item.productId),
+              couponCode: couponByProduct.get(item.productId)?.code ?? null,
+              discountPercent: couponByProduct.get(item.productId)?.discountPercent ?? null,
             })),
           },
         },
@@ -178,7 +199,7 @@ export async function POST(request: Request) {
 
   const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   // Prices are before VAT; the buyer pays the total including VAT.
-  const totals = calculateOrderTotals(subtotal, discountPercent, order.vatPercent);
+  const totals = calculateOrderTotals(order.items, null, order.vatPercent);
   const { discountAmount, total } = totals;
 
   let whatsappError: string | null = null;
@@ -198,10 +219,12 @@ export async function POST(request: Request) {
         unit: item.product.unit,
         price: item.price,
         imageUrl: item.product.imageUrl,
+        couponCode: item.couponCode,
+        discountPercent: item.discountPercent,
       })),
       subtotal,
       couponCode: appliedCouponCode,
-      discountPercent,
+      discountPercent: null,
       vatPercent: order.vatPercent,
     });
 
@@ -226,10 +249,12 @@ export async function POST(request: Request) {
               unit: item.product.unit,
               price: item.price,
               imageUrl: item.product.imageUrl,
+              couponCode: item.couponCode,
+              discountPercent: item.discountPercent,
             })),
             subtotal,
             couponCode: appliedCouponCode,
-            discountPercent,
+            discountPercent: null,
             vatPercent: order.vatPercent,
           })
         : null;

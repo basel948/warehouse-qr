@@ -5,11 +5,12 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PRODUCT_UNIT } from "@/lib/product-unit";
 import { toPublicProduct } from "@/lib/public-product";
+import { PRODUCT_INCLUDE } from "@/lib/variant-groups";
 
 export async function GET() {
   const products = await prisma.product.findMany({
     orderBy: { name: "asc" },
-    include: { categories: true, subcategory: true },
+    include: PRODUCT_INCLUDE,
   });
   // Buyers never get the exact stock quantity; the admin does.
   const session = await getServerSession(authOptions);
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
       sortOrder: (last._max.sortOrder ?? 0) + 10,
       categories: categoryIds ? { connect: categoryIds.map((id) => ({ id })) } : undefined,
     },
-    include: { categories: true, subcategory: true },
+    include: PRODUCT_INCLUDE,
   });
   return NextResponse.json(product, { status: 201 });
 }

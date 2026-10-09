@@ -11,11 +11,20 @@ export async function POST(request: Request) {
   }
 
   const code = parsed.data.code.trim().toUpperCase();
-  const coupon = await prisma.coupon.findUnique({ where: { code } });
+  const coupon = await prisma.coupon.findUnique({
+    where: { code },
+    include: { categories: { select: { id: true, name: true } } },
+  });
 
   if (!coupon || !coupon.active) {
     return NextResponse.json({ error: "Invalid or expired coupon code" }, { status: 404 });
   }
 
-  return NextResponse.json({ code: coupon.code, discountPercent: coupon.discountPercent });
+  // Empty categoryIds = applies to the whole order.
+  return NextResponse.json({
+    code: coupon.code,
+    discountPercent: coupon.discountPercent,
+    categoryIds: coupon.categories.map((c) => c.id),
+    categoryNames: coupon.categories.map((c) => c.name),
+  });
 }

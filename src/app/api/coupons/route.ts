@@ -10,13 +10,18 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const coupons = await prisma.coupon.findMany({ orderBy: { createdAt: "desc" } });
+  const coupons = await prisma.coupon.findMany({
+    orderBy: { createdAt: "desc" },
+    include: { categories: { select: { id: true, name: true } } },
+  });
   return NextResponse.json(coupons);
 }
 
 const createCouponSchema = z.object({
   code: z.string().min(1),
   discountPercent: z.number().int().min(1).max(100),
+  // Empty / missing = the whole order.
+  categoryIds: z.array(z.string().min(1)).max(100).optional(),
 });
 
 export async function POST(request: Request) {
@@ -37,7 +42,12 @@ export async function POST(request: Request) {
   }
 
   const coupon = await prisma.coupon.create({
-    data: { code, discountPercent: parsed.data.discountPercent },
+    data: {
+      code,
+      discountPercent: parsed.data.discountPercent,
+      categories: { connect: (parsed.data.categoryIds ?? []).map((id) => ({ id })) },
+    },
+    include: { categories: { select: { id: true, name: true } } },
   });
   return NextResponse.json(coupon, { status: 201 });
 }

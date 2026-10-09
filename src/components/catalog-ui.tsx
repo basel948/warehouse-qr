@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { PackageIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 import { optimizedImage } from "@/lib/image-url";
-import { getSalePercentOff } from "@/lib/effective-price";
+import { getEffectivePrice, getSalePercentOff } from "@/lib/effective-price";
 import { asProductUnit } from "@/lib/product-unit";
 
 export type Category = {
@@ -33,7 +33,210 @@ export type Product = {
   subcategory: Subcategory | null;
   /** "UNIT" or "CARTON" (src/lib/product-unit.ts). */
   unit: string;
+  /** Set when this product is one option of a card (e.g. one colour). */
+  variantGroup: { id: string; name: string } | null;
+  variantLabel: string | null;
+  variantOrder: number;
 };
+
+// ---- Product options (several products shown as one card) ----
+
+/** A shop card: one product, or a card's options in their order. */
+export type ShopCardItem = { key: string; options: Product[] };
+
+/**
+ * Groups a product list into cards. A card takes the place of its first
+ * option in the list, so sorting and arranging still apply.
+ */
+export function groupIntoCards(products: Product[]): ShopCardItem[] {
+  const cards: ShopCardItem[] = [];
+  const byGroup = new Map<string, ShopCardItem>();
+  for (const product of products) {
+    const groupId = product.variantGroup?.id;
+    if (!groupId) {
+      cards.push({ key: product.id, options: [product] });
+      continue;
+    }
+    const existing = byGroup.get(groupId);
+    if (existing) {
+      existing.options.push(product);
+    } else {
+      const card = { key: `group-${groupId}`, options: [product] };
+      byGroup.set(groupId, card);
+      cards.push(card);
+    }
+  }
+  for (const card of Array.from(byGroup.values())) {
+    card.options.sort((a, b) => a.variantOrder - b.variantOrder);
+  }
+  return cards;
+}
+
+export function optionLabel(product: Product): string {
+  return product.variantLabel || product.name;
+}
+
+/** The card photo: the chosen option's, else the first option with one. */
+export function cardImage(options: Product[], selected: Product | null): string | null {
+  return selected?.imageUrl ?? options.find((o) => o.imageUrl)?.imageUrl ?? null;
+}
+
+// Buttons for a few options (one tap); a dropdown when there are more, so six
+// cup sizes don't fill the card. Sold-out options can't be chosen.
+const MAX_OPTION_BUTTONS = 4;
+
+export function OptionPicker({
+  options,
+  selectedId,
+  onSelect,
+  highlight = false,
+  size = "sm",
+}: {
+  options: Product[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  /** Draws attention after "add" was tapped with nothing chosen. */
+  highlight?: boolean;
+  size?: "sm" | "lg";
+}) {
+  const { t } = useLocale();
+  const ring = highlight ? "ring-2 ring-[#b3402e] ring-offset-1" : "";
+  if (options.length <= MAX_OPTION_BUTTONS) {
+    return (
+      <div className={`flex flex-wrap gap-1 rounded-[8px] ${ring}`} role="radiogroup">
+        {options.map((option) => {
+          const active = option.id === selectedId;
+          return (
+            <button
+              key={option.id}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              disabled={!option.inStock}
+              onClick={() => onSelect(option.id)}
+              title={option.inStock ? undefined : t("catalog.outOfStock")}
+              className={`rounded-[7px] border font-semibold leading-tight ${
+                size === "lg" ? "px-3 py-2 text-sm" : "px-2 py-1 text-[11px]"
+              } ${
+                active
+                  ? "bg-[#1a1714] border-[#1a1714] text-white"
+                  : option.inStock
+                    ? "bg-white border-[#e6e0d6] text-[#2b2620]"
+                    : "bg-[#f7f5f1] border-[#eee9e1] text-[#b5ada2] line-through"
+              }`}
+            >
+              {optionLabel(option)}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+  return (
+    <select
+      value={selectedId ?? ""}
+      onChange={(e) => onSelect(e.target.value)}
+      aria-label={t("catalog.chooseOption")}
+      className={`w-full border border-[#e6e0d6] rounded-[8px] bg-white text-[#2b2620] font-semibold ${
+        size === "lg" ? "px-3 py-2.5 text-sm" : "px-2 py-1.5 text-xs"
+      } ${ring}`}
+    >
+      <option value="" disabled>
+        {t("catalog.chooseOption")}
+      </option>
+      {options.map((option) => (
+        <option key={option.id} value={option.id} disabled={!option.inStock}>
+          {optionLabel(option)}
+          {option.inStock ? "" : ` (${t("catalog.soldOutShort")})`}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** "From ₪X" while no option is chosen and the options' prices differ. */
+function FromPrice({ options }: { options: Product[] }) {
+  const { t } = useLocale();
+  const prices = options.map(getEffectivePrice);
+  const min = Math.min(...prices);
+  return (
+    <p className="text-sm font-bold text-[#1a1714] flex items-baseline gap-1 flex-wrap">
+      <span>{t("catalog.priceFrom", { price: min.toFixed(2) })}</span>
+      <span className="text-[#8a8177] font-medium text-[0.78em]">
+        / {t(`catalog.unitName.${asProductUnit(options[0].unit)}`)}
+      </span>
+    </p>
+  );
+}
+
+/**
+ * A shop card for one product or for a card's options. With options, the
+ * buyer picks one (buttons / dropdown) and the price, photo, stock and
+ * quantity shown are that option's; each option is its own cart line.
+ */
+export function ShopCard({
+  options,
+  cart,
+  onAdd,
+  onSetQuantity,
+  onExpand,
+}: {
+  options: Product[];
+  cart: Record<string, number>;
+  onAdd: (productId: string) => void;
+  onSetQuantity: (productId: string, quantity: number) => void;
+  onExpand: (product: Product) => void;
+}) {
+  // Start on an option that's already in the cart, so its quantity shows.
+  const [selectedId, setSelectedId] = useState<string | null>(
+    () => (options.length === 1 ? options[0].id : options.find((o) => (cart[o.id] ?? 0) > 0)?.id ?? null)
+  );
+  const [needsChoice, setNeedsChoice] = useState(false);
+
+  if (options.length === 1) {
+    const product = options[0];
+    return (
+      <ProductCard
+        product={product}
+        quantity={cart[product.id] ?? 0}
+        onAdd={() => onAdd(product.id)}
+        onSetQuantity={(qty) => onSetQuantity(product.id, qty)}
+        onExpand={() => onExpand(product)}
+      />
+    );
+  }
+
+  const selected = options.find((o) => o.id === selectedId) ?? null;
+  // Shown while nothing is chosen: the first option still available.
+  const shown = selected ?? options.find((o) => o.inStock) ?? options[0];
+  const samePrice = new Set(options.map(getEffectivePrice)).size === 1;
+  return (
+    <ProductCard
+      product={shown}
+      title={options[0].variantGroup?.name}
+      imageUrl={cardImage(options, selected)}
+      price={!selected && !samePrice ? <FromPrice options={options} /> : undefined}
+      picker={
+        <OptionPicker
+          options={options}
+          selectedId={selectedId}
+          highlight={needsChoice && !selected}
+          onSelect={(id) => {
+            setSelectedId(id);
+            setNeedsChoice(false);
+          }}
+        />
+      }
+      quantity={selected ? cart[selected.id] ?? 0 : 0}
+      onAdd={() => {
+        if (selected) onAdd(selected.id);
+        else setNeedsChoice(true);
+      }}
+      onSetQuantity={(qty) => selected && onSetQuantity(selected.id, qty)}
+      onExpand={() => onExpand(shown)}
+    />
+  );
+}
 
 function PriceDisplay({ product, size = "sm" }: { product: Product; size?: "sm" | "lg" }) {
   const { t } = useLocale();
@@ -199,12 +402,21 @@ export function ProductCard({
   onAdd,
   onSetQuantity,
   onExpand,
+  title,
+  imageUrl = product.imageUrl,
+  price,
+  picker,
 }: {
   product: Product;
   quantity: number;
   onAdd: () => void;
   onSetQuantity: (quantity: number) => void;
   onExpand: () => void;
+  /** Card with options (ShopCard): the card's name, photo, price and picker. */
+  title?: string;
+  imageUrl?: string | null;
+  price?: ReactNode;
+  picker?: ReactNode;
 }) {
   const { t } = useLocale();
   const percentOff = getSalePercentOff(product);
@@ -215,7 +427,7 @@ export function ProductCard({
     <div className="border border-[#eae5dc] rounded-[14px] overflow-hidden flex flex-col bg-white">
       <div
         className={`relative aspect-square flex items-center justify-center overflow-hidden p-2 ${
-          product.imageUrl ? "bg-white" : "bg-[#f2efe9]"
+          imageUrl ? "bg-white" : "bg-[#f2efe9]"
         }`}
       >
         {!product.inStock && (
@@ -228,11 +440,11 @@ export function ProductCard({
             -{percentOff}%
           </span>
         )}
-        {product.imageUrl ? (
+        {imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={optimizedImage(product.imageUrl, "CARD")}
-            alt={product.name}
+            src={optimizedImage(imageUrl, "CARD")}
+            alt={title ?? product.name}
             className={`w-full h-full object-contain ${fade}`}
           />
         ) : (
@@ -242,9 +454,10 @@ export function ProductCard({
 
       <div className={`p-[9px] pb-2.5 flex flex-col gap-[5px] flex-1 ${fade}`}>
         <p className="text-xs font-medium text-[#2b2620] line-clamp-2 min-h-[33px] leading-tight">
-          {product.name}
+          {title ?? product.name}
         </p>
-        <PriceDisplay product={product} />
+        {price ?? <PriceDisplay product={product} />}
+        {picker}
 
         <div className="mt-auto flex items-center gap-1.5">
           <button
@@ -272,13 +485,21 @@ export function ProductDetailModal({
   onAdd,
   onSetQuantity,
   onClose,
+  options = [],
+  onSelectOption,
 }: {
   product: Product;
   quantity: number;
   onAdd: () => void;
   onSetQuantity: (quantity: number) => void;
   onClose: () => void;
+  /** The card's options when `product` is one of them (picker shown). */
+  options?: Product[];
+  onSelectOption?: (product: Product) => void;
 }) {
+  const hasOptions = options.length > 1;
+  const title = hasOptions ? product.variantGroup?.name ?? product.name : product.name;
+  const imageUrl = hasOptions ? cardImage(options, product) : product.imageUrl;
   const { t } = useLocale();
 
   useEffect(() => {
@@ -309,21 +530,21 @@ export function ProductDetailModal({
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={product.name}
+        aria-label={title}
         className="w-full max-w-md bg-white rounded-2xl max-h-[90dvh] overflow-y-auto overscroll-contain shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="relative">
           <div
             className={`aspect-square max-h-[45dvh] w-full flex items-center justify-center overflow-hidden p-6 rounded-t-2xl ${
-              product.imageUrl ? "bg-white" : "bg-[#f2efe9]"
+              imageUrl ? "bg-white" : "bg-[#f2efe9]"
             }`}
           >
-            {product.imageUrl ? (
+            {imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={optimizedImage(product.imageUrl, "DETAIL")}
-                alt={product.name}
+                src={optimizedImage(imageUrl, "DETAIL")}
+                alt={title}
                 className="w-full h-full object-contain"
               />
             ) : (
@@ -340,7 +561,7 @@ export function ProductDetailModal({
         </div>
 
         <div className="p-[18px] pb-[22px]">
-          <h2 className="text-lg font-bold text-[#1a1714] mb-1">{product.name}</h2>
+          <h2 className="text-lg font-bold text-[#1a1714] mb-1">{title}</h2>
           <div className="mb-2">
             <PriceDisplay product={product} size="lg" />
           </div>
@@ -349,6 +570,19 @@ export function ProductDetailModal({
               {product.categories.map((category) => category.name).join(", ")}
               {product.subcategory ? ` · ${product.subcategory.name}` : ""}
             </p>
+          )}
+          {hasOptions && (
+            <div className="mb-3">
+              <OptionPicker
+                options={options}
+                selectedId={product.id}
+                onSelect={(id) => {
+                  const next = options.find((o) => o.id === id);
+                  if (next) onSelectOption?.(next);
+                }}
+                size="lg"
+              />
+            </div>
           )}
           {product.description && (
             <p className="text-sm text-[#6b6259] leading-relaxed mb-4">{product.description}</p>

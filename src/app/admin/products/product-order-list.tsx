@@ -24,6 +24,7 @@ import { useConfirm } from "@/components/confirm-dialog";
 import { useLocale } from "@/components/locale-provider";
 import { useToast } from "@/components/toast";
 import { optimizedImage } from "@/lib/image-url";
+import { MergeOptionsDialog } from "./merge-options-dialog";
 
 type OrderProduct = {
   id: string;
@@ -33,6 +34,8 @@ type OrderProduct = {
   sortOrder: number;
   categories: { id: string }[];
   subcategoryId: string | null;
+  variantGroup: { id: string; name: string } | null;
+  variantLabel: string | null;
 };
 
 type OrderCategory = { id: string; name: string };
@@ -73,6 +76,7 @@ export function ProductOrderSection({
   const [categoryId, setCategoryId] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [merging, setMerging] = useState(false);
   // Accordion: at most one subcategory is open, so only its products show.
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [newSubcategoryName, setNewSubcategoryName] = useState("");
@@ -124,6 +128,31 @@ export function ProductOrderSection({
       else next.add(id);
       return next;
     });
+  }
+
+  async function unmerge() {
+    const merged = selectedHere.filter((p) => p.variantGroup);
+    const ok = await confirm({
+      title: t("admin.variants.unmergeTitle", { count: merged.length }),
+      message: t("admin.variants.unmergeBody"),
+      confirmLabel: t("admin.variants.unmerge"),
+      tone: "normal",
+    });
+    if (!ok) return;
+    setBulkBusy(true);
+    const res = await fetch("/api/products/bulk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productIds: merged.map((p) => p.id), action: "unmerge" }),
+    });
+    setBulkBusy(false);
+    if (!res.ok) {
+      toast(t("admin.products.toastFailed"), "error");
+      return;
+    }
+    setSelected(new Set());
+    toast(t("admin.variants.unmerged", { count: merged.length }));
+    onSaved();
   }
 
   async function runBulk(action: "outOfStock" | "inStock" | "delete") {
@@ -373,6 +402,28 @@ export function ProductOrderSection({
               <option value="other">{t("catalog.otherCategory")}</option>
             </select>
           )}
+          {/* Always shown once something is ticked, so it's discoverable;
+              merging needs at least two products. */}
+          <button
+            type="button"
+            disabled={bulkBusy}
+            onClick={() =>
+              selectedHere.length >= 2 ? setMerging(true) : toast(t("admin.variants.mergeNeedTwo"), "error")
+            }
+            className="text-[13px] font-semibold rounded-[8px] bg-[var(--accent)] px-3 py-1.5 disabled:opacity-50"
+          >
+            {t("admin.variants.mergeButton")}
+          </button>
+          {selectedHere.some((p) => p.variantGroup) && (
+            <button
+              type="button"
+              disabled={bulkBusy}
+              onClick={unmerge}
+              className="text-[13px] font-semibold rounded-[8px] bg-[#33508f] px-3 py-1.5 disabled:opacity-50"
+            >
+              {t("admin.variants.unmerge")}
+            </button>
+          )}
           <button
             type="button"
             disabled={bulkBusy}
@@ -389,6 +440,19 @@ export function ProductOrderSection({
             {t("admin.products.bulkClear")}
           </button>
         </div>
+      )}
+
+      {merging && (
+        <MergeOptionsDialog
+          products={selectedHere}
+          onClose={() => setMerging(false)}
+          onMerged={() => {
+            setMerging(false);
+            setSelected(new Set());
+            toast(t("admin.variants.merged", { count: selectedHere.length }));
+            onSaved();
+          }}
+        />
       )}
     </div>
   );
@@ -495,6 +559,11 @@ function SortableProductRow({
       <span className={`text-[13px] font-medium truncate ${product.inStock ? "text-[#1a1714]" : "text-[#a39a8e]"}`}>
         {product.name}
       </span>
+      {product.variantGroup && (
+        <span className="ms-auto shrink-0 max-w-[40%] truncate text-[11px] font-semibold rounded-full px-2 py-0.5 bg-[#eef2fb] text-[#33508f]">
+          {product.variantGroup.name}
+        </span>
+      )}
     </li>
   );
 }

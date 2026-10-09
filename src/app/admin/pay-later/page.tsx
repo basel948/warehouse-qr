@@ -12,6 +12,8 @@ type OrderItem = {
   id: string;
   quantity: number;
   price: number;
+  couponCode: string | null;
+  discountPercent: number | null;
   product: { name: string };
 };
 
@@ -42,8 +44,7 @@ const FILTERS = ["OUTSTANDING", "SETTLED", "ALL"] as const;
 type Filter = (typeof FILTERS)[number];
 
 function orderTotal(order: Order): number {
-  const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  return calculateOrderTotals(subtotal, order.discountPercent, order.vatPercent).total;
+  return calculateOrderTotals(order.items, order, order.vatPercent).total;
 }
 
 function isCancelled(order: Order): boolean {
@@ -195,7 +196,9 @@ export default function AdminPayLaterPage() {
                       <div className="flex items-center justify-between gap-3">
                         <span className="font-semibold">
                           {new Date(order.createdAt).toLocaleDateString(dateLocale)}
-                          {order.couponCode ? ` · ${order.couponCode} (-${order.discountPercent}%)` : ""}
+                          {order.couponCode
+                            ? ` · ${order.couponCode}${order.discountPercent ? ` (-${order.discountPercent}%)` : ""}`
+                            : ""}
                           {cancelled ? ` · ${t("admin.payLater.cancelled")}` : ""}
                         </span>
                         <span className="flex items-center gap-2 shrink-0">

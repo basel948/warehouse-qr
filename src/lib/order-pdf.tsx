@@ -19,6 +19,9 @@ export type OrderPdfItem = {
   quantity: number;
   /** Product.unit ("UNIT" / "CARTON"); missing = יחידה. */
   unit?: string | null;
+  /** The coupon that discounted this line (orders with per-item coupons). */
+  couponCode?: string | null;
+  discountPercent?: number | null;
   price: number;
   imageUrl: string | null;
 };
@@ -121,7 +124,13 @@ const TOTAL_LABEL: Record<DocumentVariant, string> = {
 };
 
 function OrderDocument({ order, variant }: { order: OrderPdfData; variant: DocumentVariant }) {
-  const totals = calculateOrderTotals(order.subtotal, order.discountPercent, order.vatPercent);
+  // order.couponCode/discountPercent: the single order-wide coupon of orders
+  // from before per-item coupons (newer orders pass discountPercent null).
+  const totals = calculateOrderTotals(
+    order.items,
+    { couponCode: order.couponCode, discountPercent: order.discountPercent },
+    order.vatPercent
+  );
 
   return (
     <Document>
@@ -185,7 +194,14 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
                     style={styles.productThumb}
                   />
                 )}
-                <Text style={styles.productName}>{item.productName}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 9 }}>{item.productName}</Text>
+                  {item.discountPercent ? (
+                    <Text style={{ fontSize: 8, color: "#2f6b3a", marginTop: 2 }}>
+                      קופון <Text style={{ direction: "ltr" }}>{item.couponCode}</Text> -{item.discountPercent}%
+                    </Text>
+                  ) : null}
+                </View>
               </View>
               <Text style={[styles.tableCell, styles.colQty]}>{formatQuantityHe(item.quantity, item.unit)}</Text>
               <Text style={[styles.tableCell, styles.colPrice]}>{formatCurrency(item.price)}</Text>
@@ -197,21 +213,20 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
         </View>
 
         <View style={styles.totals}>
-          {order.couponCode && order.discountPercent && (
+          {totals.discounts.length > 0 && (
             <>
               <View style={styles.totalsRow}>
-                <Text style={styles.totalsValue}>{formatCurrency(order.subtotal)}</Text>
+                <Text style={styles.totalsValue}>{formatCurrency(totals.subtotal)}</Text>
                 <Text style={styles.totalsLabel}>סכום ביניים</Text>
               </View>
-              <View style={styles.totalsRow}>
-                <Text style={styles.totalsValue}>
-                  -{formatCurrency(totals.discountAmount)}
-                </Text>
-                <Text style={styles.totalsLabel}>
-                  קופון <Text style={{ direction: "ltr" }}>{order.couponCode}</Text> (-
-                  {order.discountPercent}%)
-                </Text>
-              </View>
+              {totals.discounts.map((discount) => (
+                <View style={styles.totalsRow} key={`${discount.code}-${discount.percent}`}>
+                  <Text style={styles.totalsValue}>-{formatCurrency(discount.amount)}</Text>
+                  <Text style={styles.totalsLabel}>
+                    קופון <Text style={{ direction: "ltr" }}>{discount.code}</Text> (-{discount.percent}%)
+                  </Text>
+                </View>
+              ))}
             </>
           )}
           {totals.vatPercent ? (

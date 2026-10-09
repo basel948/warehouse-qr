@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { toPublicProduct } from "@/lib/public-product";
 import { HomeCategoryGrid } from "./home-category-grid";
 import { SaleCarousel } from "@/components/sale-carousel";
+import { PRODUCT_INCLUDE } from "@/lib/variant-groups";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function HomePage() {
     where: { onSale: true, salePrice: { not: null } },
     orderBy: { updatedAt: "desc" },
     take: SALE_PRODUCTS_LIMIT,
-    include: { categories: true, subcategory: true },
+    include: PRODUCT_INCLUDE,
   });
 
   return (
