@@ -36,6 +36,7 @@ type OrderProduct = {
   subcategoryId: string | null;
   variantGroup: { id: string; name: string } | null;
   variantLabel: string | null;
+  variantOrder: number;
 };
 
 type OrderCategory = { id: string; name: string };
@@ -445,6 +446,7 @@ export function ProductOrderSection({
       {merging && (
         <MergeOptionsDialog
           products={selectedHere}
+          allProducts={products}
           onClose={() => setMerging(false)}
           onMerged={() => {
             setMerging(false);

@@ -3,14 +3,22 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { deleteEmptyVariantGroups } from "@/lib/variant-groups";
 
 const updateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
-  /** The card's product ids in their new option order. */
-  order: z.array(z.string().min(1)).max(50).optional(),
+  /**
+   * Every option's label, in their new order ("edit names and order", or a
+   * merge that adds ticked products to this card - they move onto it).
+   */
+  options: z
+    .array(z.object({ productId: z.string().min(1), label: z.string().trim().min(1).max(60) }))
+    .max(50)
+    .optional(),
 });
 
-// Rename a card, or reorder its options.
+// Rename a card and relabel / reorder its options; products listed that are
+// on no card or another card move onto this one (merge into an existing card).
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions);
   if (!session) {
@@ -27,32 +35,16 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       where: { id: params.id },
       data: parsed.data.name ? { name: parsed.data.name } : {},
     });
-    const order = parsed.data.order ?? [];
-    for (let index = 0; index < order.length; index++) {
-      const productId = order[index];
-      await tx.product.updateMany({
-        where: { id: productId, variantGroupId: params.id },
-        data: { variantOrder: index },
+    const options = parsed.data.options ?? [];
+    for (let index = 0; index < options.length; index++) {
+      await tx.product.update({
+        where: { id: options[index].productId },
+        data: { variantGroupId: params.id, variantLabel: options[index].label, variantOrder: index },
       });
     }
     return updated;
   });
+  // Products joining may have left another card with one option or none.
+  if (parsed.data.options) await deleteEmptyVariantGroups();
   return NextResponse.json(group);
-}
-
-// Split the card: every option goes back to being its own card.
-export async function DELETE(_request: Request, { params }: { params: { id: string } }) {
-  const session = await getServerSession(authOptions);
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  await prisma.$transaction([
-    prisma.product.updateMany({
-      where: { variantGroupId: params.id },
-      data: { variantGroupId: null, variantLabel: null, variantOrder: 0 },
-    }),
-    prisma.variantGroup.deleteMany({ where: { id: params.id } }),
-  ]);
-  return NextResponse.json({ ok: true });
 }

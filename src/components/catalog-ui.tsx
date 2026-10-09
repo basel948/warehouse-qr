@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { PackageIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 import { optimizedImage } from "@/lib/image-url";
@@ -81,10 +81,14 @@ export function cardImage(options: Product[], selected: Product | null): string 
   return selected?.imageUrl ?? options.find((o) => o.imageUrl)?.imageUrl ?? null;
 }
 
-// Buttons for a few options (one tap); a dropdown when there are more, so six
-// cup sizes don't fill the card. Sold-out options can't be chosen.
-const MAX_OPTION_BUTTONS = 4;
+// useLayoutEffect warns when React renders on the server; it only needs to
+// run in the browser (to measure), so fall back to useEffect there.
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
+// The options as buttons when they all fit on one line of the card, otherwise
+// a dropdown (e.g. six cup sizes on a narrow phone card). A hidden copy of the
+// button row is measured against the card's width, and re-measured when the
+// card resizes. Sold-out options can't be chosen.
 export function OptionPicker({
   options,
   selectedId,
@@ -100,57 +104,84 @@ export function OptionPicker({
   size?: "sm" | "lg";
 }) {
   const { t } = useLocale();
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const [fits, setFits] = useState(true);
+
+  useIsomorphicLayoutEffect(() => {
+    const box = boxRef.current;
+    const row = rowRef.current;
+    if (!box || !row) return;
+    const measure = () => setFits(row.scrollWidth <= box.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [options, size]);
+
   const ring = highlight ? "ring-2 ring-[#b3402e] ring-offset-1" : "";
-  if (options.length <= MAX_OPTION_BUTTONS) {
-    return (
-      <div className={`flex flex-wrap gap-1 rounded-[8px] ${ring}`} role="radiogroup">
-        {options.map((option) => {
-          const active = option.id === selectedId;
-          return (
+  const buttonClass = (option: Product) => {
+    const active = option.id === selectedId;
+    return `shrink-0 whitespace-nowrap rounded-[7px] border font-semibold leading-tight ${
+      size === "lg" ? "px-3 py-2 text-sm" : "px-2 py-1 text-[11px]"
+    } ${
+      active
+        ? "bg-[var(--accent)] border-[var(--accent)] text-white"
+        : option.inStock
+          ? "bg-white border-[#e6e0d6] text-[#2b2620] hover:border-[var(--accent)]"
+          : "bg-[#f7f5f1] border-[#eee9e1] text-[#b5ada2] line-through"
+    }`;
+  };
+
+  return (
+    <div ref={boxRef} className="relative w-full min-w-0">
+      {/* Measuring copy: never seen or tapped. */}
+      <div ref={rowRef} aria-hidden className="absolute top-0 start-0 invisible pointer-events-none flex gap-1 w-max">
+        {options.map((option) => (
+          <span key={option.id} className={buttonClass(option)}>
+            {optionLabel(option)}
+          </span>
+        ))}
+      </div>
+
+      {fits ? (
+        <div className={`flex gap-1 rounded-[8px] ${ring}`} role="radiogroup">
+          {options.map((option) => (
             <button
               key={option.id}
               type="button"
               role="radio"
-              aria-checked={active}
+              aria-checked={option.id === selectedId}
               disabled={!option.inStock}
               onClick={() => onSelect(option.id)}
               title={option.inStock ? undefined : t("catalog.outOfStock")}
-              className={`rounded-[7px] border font-semibold leading-tight ${
-                size === "lg" ? "px-3 py-2 text-sm" : "px-2 py-1 text-[11px]"
-              } ${
-                active
-                  ? "bg-[#1a1714] border-[#1a1714] text-white"
-                  : option.inStock
-                    ? "bg-white border-[#e6e0d6] text-[#2b2620]"
-                    : "bg-[#f7f5f1] border-[#eee9e1] text-[#b5ada2] line-through"
-              }`}
+              className={buttonClass(option)}
             >
               {optionLabel(option)}
             </button>
-          );
-        })}
-      </div>
-    );
-  }
-  return (
-    <select
-      value={selectedId ?? ""}
-      onChange={(e) => onSelect(e.target.value)}
-      aria-label={t("catalog.chooseOption")}
-      className={`w-full border border-[#e6e0d6] rounded-[8px] bg-white text-[#2b2620] font-semibold ${
-        size === "lg" ? "px-3 py-2.5 text-sm" : "px-2 py-1.5 text-xs"
-      } ${ring}`}
-    >
-      <option value="" disabled>
-        {t("catalog.chooseOption")}
-      </option>
-      {options.map((option) => (
-        <option key={option.id} value={option.id} disabled={!option.inStock}>
-          {optionLabel(option)}
-          {option.inStock ? "" : ` (${t("catalog.soldOutShort")})`}
-        </option>
-      ))}
-    </select>
+          ))}
+        </div>
+      ) : (
+        <select
+          value={selectedId ?? ""}
+          onChange={(e) => onSelect(e.target.value)}
+          aria-label={t("catalog.chooseOption")}
+          className={`w-full border rounded-[8px] bg-white font-semibold ${
+            selectedId ? "border-[var(--accent)] text-[var(--accent)]" : "border-[#e6e0d6] text-[#2b2620]"
+          } ${size === "lg" ? "px-3 py-2.5 text-sm" : "px-2 py-1.5 text-xs"} ${ring}`}
+        >
+          <option value="" disabled>
+            {t("catalog.chooseOption")}
+          </option>
+          {options.map((option) => (
+            <option key={option.id} value={option.id} disabled={!option.inStock}>
+              {optionLabel(option)}
+              {option.inStock ? "" : ` (${t("catalog.soldOutShort")})`}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
   );
 }
 

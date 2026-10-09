@@ -4,7 +4,7 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PRODUCT_UNIT } from "@/lib/product-unit";
-import { PRODUCT_INCLUDE, deleteEmptyVariantGroups } from "@/lib/variant-groups";
+import { PRODUCT_INCLUDE } from "@/lib/variant-groups";
 
 const updateProductSchema = z.object({
   name: z.string().min(1).optional(),
@@ -19,9 +19,6 @@ const updateProductSchema = z.object({
   subcategoryId: z.string().min(1).nullable().optional(),
   unit: z.enum([PRODUCT_UNIT.UNIT, PRODUCT_UNIT.CARTON]).optional(),
   stockQuantity: z.number().int().min(0).max(1_000_000).nullable().optional(),
-  // Option label on its card; variantGroupId null takes it off its card.
-  variantLabel: z.string().trim().max(60).nullable().optional(),
-  variantGroupId: z.null().optional(),
 });
 
 export async function PATCH(request: Request, { params }: { params: { id: string } }) {
@@ -59,12 +56,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     where: { id: params.id },
     data: {
       ...rest,
-      ...(rest.variantGroupId === null ? { variantLabel: null, variantOrder: 0 } : {}),
       categories: categoryIds ? { set: categoryIds.map((id) => ({ id })) } : undefined,
     },
     include: PRODUCT_INCLUDE,
   });
-  if (rest.variantGroupId === null) await deleteEmptyVariantGroups();
   return NextResponse.json(product);
 }
 
