@@ -1,128 +1,168 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+For *what* the product is and *why* it behaves the way it does (features, rules, decisions), read
+`docs/PRODUCT.md` first; this file covers *how* the code is organised.
 
 ## What this is
 
-A Next.js (App Router) site for a warehouse ordering flow: a customer scans a QR code, lands on
-the product catalog at `/`, and submits an order. The order is saved to the database and a
-WhatsApp message is sent to the warehouse owner via the Meta WhatsApp Cloud API. There is no
-buyer account system — orders are anonymous (name + phone captured per order). The warehouse
-owner authenticates into `/admin` to manage products and view/update order status.
+**Royal Stock** (royalstockonline.com): a Next.js 14 (App Router) wholesale ordering site for a
+cleaning-supplies / disposables warehouse in Israel. A buyer scans a QR code (or opens the site),
+browses categories, fills a cart and submits an order with name + business name + phone. There are
+no buyer accounts. The order is saved, a PDF is generated and emailed to the owner (SendGrid). The
+owner manages everything in `/admin` (products, categories, coupons, orders, pay-later debts).
+The UI is Hebrew and Arabic, both right-to-left.
 
 ## Commands
 
-- `npm run dev` — start the dev server.
-- `npm run build` / `npm run start` — production build and serve.
-- `npm run lint` — Next.js/ESLint checks.
-- `npx prisma migrate dev --name <name>` — create and apply a migration after editing `prisma/schema.prisma`.
-- `npx prisma generate` — regenerate the Prisma client (runs automatically after `migrate dev`).
-- `npm run db:seed` — seed the admin user (from `SEED_ADMIN_USERNAME`/`SEED_ADMIN_PASSWORD` in `.env`), categories, and sample products; fully idempotent (upserts everything by stable id/name), safe to re-run at any time.
-- `npm run db:studio` — open Prisma Studio to inspect/edit the database directly.
+- `npm run dev` — dev server (localhost:3000).
+- `npm run build` / `npm run start` — production build and serve. `start` runs
+  `prisma migrate deploy` first, so pending migrations apply automatically on every Railway deploy.
+- `npm run lint` — ESLint. The only expected warnings are the two `alt-text` ones in
+  `src/lib/order-pdf.tsx` (react-pdf's `<Image>` has no alt prop).
+- `npx tsc --noEmit` — type-check (there is no test suite; this plus lint is the check).
+- `npx prisma migrate dev --name <name>` — create and apply a migration after editing
+  `prisma/schema.prisma`. On Windows, stop the dev server first: it locks the Prisma engine DLL
+  and `prisma generate` fails with EPERM. After a schema change, restart the dev server or it
+  keeps the old client ("Unknown field ..." errors).
+- `npm run db:seed` — seed admin user / categories / sample products (idempotent).
+- `npm run db:studio` — Prisma Studio.
+- After `migrate dev`, `git checkout -- prisma/migrations/migration_lock.toml` (Windows rewrites
+  its line endings; don't commit that noise).
 
-There is no test suite configured yet.
+## Environments and data
+
+- **Local DB ≠ live DB.** Local `.env` points at a dev database. Products/orders created on
+  localhost never appear on the live site.
+- **Production**: Railway (service `web` + a Postgres service). Env vars live in Railway settings.
+  Changing live data is done by the developer running a one-off Node script on the Railway
+  container (`railway ssh --service web`, with `NODE_PATH=$(pwd)/node_modules`), not from a local
+  machine. Prefer the admin UI for anything the owner can do himself.
+- **Images**: ImageKit (`src/lib/imagekit.ts` uploads, `src/lib/image-url.ts` builds resized URLs
+  via presets). Uploads are shrunk in the browser first (`src/lib/shrink-image.ts`, 1600px) and
+  capped at 1600px by ImageKit. `scripts/` holds one-off migration/import scripts (SQLite→Postgres,
+  Cloudinary→ImageKit, product import, background removal) — history, not part of the app.
+- **Email**: SendGrid HTTPS API (`src/lib/order-email.ts`, `src/lib/password-reset.ts`). Raw SMTP
+  is blocked on Railway. Don't change `SENDGRID_FROM_EMAIL` without verifying the new sender in
+  SendGrid first.
+- **WhatsApp**: code exists (`src/lib/whatsapp.ts`) but sending is switched off
+  (`ORDER_WHATSAPP_NOTIFICATIONS_ENABLED = false` in `src/app/api/orders/route.ts`) until the
+  owner's WhatsApp Business setup is done. Orders go out by email only.
+
+See `.env.example` for every variable.
 
 ## Architecture
 
-**Database**: Postgres via Prisma (`prisma/schema.prisma`), a Railway Postgres service in
-production. It was SQLite on a Railway volume until 2026-09; the old SQLite migrations were replaced
-by a single Postgres baseline migration, and `scripts/copy-to-postgres/` holds the one-time data
-copy used for the switch. Models: `Admin`, `Category`, `Product`,
-`Order`, `OrderItem`, `Coupon`. `Order.status` is a plain `String` (a holdover from SQLite, which has no enums)
-constrained at the application layer by `src/lib/order-status.ts` (`ORDER_STATUS.PENDING` /
-`CONFIRMED` / `CANCELLED`) rather than a Prisma enum — use that constant instead of hardcoding
-status strings. `src/lib/prisma.ts` exports a singleton client (guards against exhausting
-connections from Next.js dev-mode hot reload).
+### Data model (`prisma/schema.prisma`, Postgres)
 
-`Product.categoryId` is nullable — products with no category fall into an "Other" bucket in the
-UI rather than being required to pick one. Category deletion sets `categoryId` to null on its
-products (`onDelete: SetNull`) rather than deleting them.
+- `Category` (ordered, optional tile image) → `Subcategory` (ordered, belongs to one category).
+- `Product`: many categories, at most one subcategory, `sortOrder` (admin-arranged), `price`
+  (before VAT), `onSale`/`salePrice`, `unit` (`UNIT`|`CARTON`, `src/lib/product-unit.ts`),
+  `stockQuantity` (null = not tracked), `inStock`, and optional `variantGroupId`/`variantLabel`/
+  `variantOrder` (see Product options).
+- `VariantGroup`: one shop card holding several products as options.
+- `Coupon`: `code` (stored uppercased), `discountPercent`, `active`, and `categories` (empty =
+  whole order).
+- `Order` + `OrderItem`: everything about the money is a **snapshot** taken at order time —
+  item `price`, item `couponCode`/`discountPercent`, order `vatPercent`. Never recompute an old
+  order from current products/coupons. Older orders have an order-level `discountPercent` and/or
+  null `vatPercent`; `calculateOrderTotals` handles both shapes.
+- `Order.status` and `Order.paymentMethod` are plain strings constrained by
+  `src/lib/order-status.ts` and `src/lib/payment-method.ts` — use those constants.
+- `OrderItem.stockDeducted` records whether that line took stock, so cancelling returns exactly
+  what was taken.
+- `Admin` + `PasswordResetToken` (hashed, 30-minute, single-use) for the owner's login.
 
-`Order.couponCode`/`Order.discountPercent` are a denormalized snapshot of whichever `Coupon` was
-applied at checkout, not a foreign key — this is deliberate, so that deleting or deactivating a
-coupon later doesn't change what past orders show. `Coupon.code` is always stored/compared
-uppercased (done in the API layer, not the DB).
+### Money: `src/lib/order-totals.ts` is the single source of truth
 
-**Auth**: Single-role admin auth via NextAuth Credentials provider (`src/lib/auth.ts`), JWT
-session strategy, no database session table. Admin passwords are bcrypt-hashed in the `Admin`
-table. `src/middleware.ts` protects everything under `/admin` except `/admin/login` by
-redirecting unauthenticated requests to the login page. There's no buyer-facing auth at all —
-the catalog and order-submission API are fully public.
+`calculateOrderTotals(lines, orderCoupon, vatPercent)` is used by the checkout window, the orders
+API, the PDF, the email, the admin orders page and the pay-later page — never compute totals
+elsewhere. `VAT_PERCENT = 18`. `bestCouponFor()` picks, per product, the biggest applied coupon
+that covers it (whole-order coupons cover everything; category coupons cover products in any of
+their categories). Coupons never stack on one item. The orders API re-derives every discount
+server-side from the DB; the client's preview is never trusted.
 
-**Customer flow** (`src/app/page.tsx` + `src/app/order-catalog.tsx`): the page is a server
-component that reads products directly via Prisma (no fetch round-trip); the catalog/cart/
-checkout UI is a client component that posts to `POST /api/orders`.
+### Stock: `src/lib/stock.ts`
 
-**Admin flow** (`src/app/admin/**`): `layout.tsx` wraps every admin route in a `SessionProvider`
-(`providers.tsx`) and conditionally renders the nav bar (`admin-chrome.tsx` hides it on the
-login page, since that route isn't authenticated yet). Product and order management pages are
-client components that call the JSON API routes directly.
+`deductStock` runs inside the order transaction with conditional decrements (no overselling under
+concurrent orders); a shortage rolls back the whole order and returns `insufficient_stock` with what
+is available. Reaching 0 sets `inStock = false`. `PATCH /api/orders/[id]` to CANCELLED calls
+`restoreOrderStock`; reopening calls `redeductOrderStock` (floors at 0). Untracked products
+(`stockQuantity` null) are never touched.
 
-**API routes** (`src/app/api/**`): `products` and `products/[id]` are public for GET, admin-only
-(`getServerSession`) for mutations. `orders` GET (list) is admin-only; `orders` POST (create) is
-public — this is the endpoint the customer checkout flow hits. `orders/[id]` PATCH (status
-update) is admin-only.
+**Buyers never receive `stockQuantity`**: every product handed to the shop goes through
+`toPublicProduct()` (`src/lib/public-product.ts`) — server components and the public
+`GET /api/products` (the admin, with a session, gets the full object). Keep that when adding new
+product queries for the shop. Product queries use `PRODUCT_INCLUDE` from `src/lib/variant-groups.ts`.
 
-**Order creation → WhatsApp** (`POST /api/orders` in `src/app/api/orders/route.ts`): creates the
-`Order`+`OrderItem` rows, then calls `sendOrderWhatsAppMessage` (`src/lib/whatsapp.ts`), which
-posts to the Meta Graph API. WhatsApp failures are caught and do **not** fail the order — the
-order is always persisted; `whatsappError` is returned to the client and `Order.whatsappSentAt`
-stays `null` so admins can see which orders failed to notify (visible in `/admin/orders`). Keep
-this non-blocking behavior when touching this code path — a WhatsApp/Meta outage should never
-block someone from placing an order.
+### Product options (one card, several products)
 
-**QR code**: generated on the fly in `src/app/admin/page.tsx` via the `qrcode` package, encoding
-`NEXT_PUBLIC_SITE_URL` (the catalog root, not a per-product URL — there's one QR code for the
-whole warehouse). No QR image is stored; it's regenerated on every load of `/admin`.
+Each option (a colour, a size) is a normal `Product` with its own price/stock/photo/cart line,
+linked by `variantGroupId`. Cart, orders, stock, coupons and PDF need no special handling. In the
+shop, `groupIntoCards()` (`src/components/catalog-ui.tsx`) turns a product list into cards (a card
+takes its first option's place, so sorting/arranging still applies); `ShopCard` renders one, and
+`OptionPicker` shows buttons when they fit on one line of the card (measured with a hidden copy +
+ResizeObserver) and a dropdown otherwise. Admin: cards are created/extended/undone only from the
+arrange list's bulk bar (`merge-options-dialog.tsx`, `POST/PATCH /api/variant-groups`,
+bulk `unmerge`); the edit window only offers "edit names and order". `deleteEmptyVariantGroups()`
+dissolves cards left with one option. Keep it to one way per task — the owner asked for that.
 
-**Coupons**: `POST /api/coupons/validate` is public and lets the checkout UI (`order-catalog.tsx`)
-preview a discount before submitting. That preview is not trusted — `POST /api/orders` re-looks-up
-the coupon by code and re-derives `discountPercent` server-side from the DB, so a client can't
-forge a discount by tampering with the request body. `/admin/coupons` manages coupons
-(create/activate/deactivate/delete); the checkout UI only ever sends a `couponCode` string.
+### Shop (`src/app/(shop)/`, public)
 
-**Branding**: `src/lib/branding.ts` reads `NEXT_PUBLIC_WAREHOUSE_NAME` / `NEXT_PUBLIC_WAREHOUSE_LOGO_URL`
-and is the single source of truth for the shop name/logo; `src/components/brand-logo.tsx` renders
-it (falls back to a placeholder icon box when no logo URL is set) and is shared between the buyer
-header, admin nav, and admin login. There's no DB-backed settings page — changing the name/logo
-means editing `.env` and redeploying, matching how `NEXT_PUBLIC_SITE_URL` already works. The color
-palette is stone (neutral) + amber (accent) throughout, defined via Tailwind utility classes rather
-than a central theme file; `globals.css` fixes the page background to light — do not reintroduce a
-`prefers-color-scheme: dark` override there, since that previously made the site go black for any
-visitor with OS-level dark mode on.
+- `layout.tsx` wraps everything in `StorefrontShell` (`src/components/storefront-shell.tsx`):
+  header + search, cart state (localStorage, with a "continue your order?" prompt), floating cart
+  bar, product detail modal, back-to-top, and the `CheckoutSheet` (coupons, VAT totals, buyer
+  details, payment method). `useCart()` exposes it to pages.
+- `page.tsx` (home): sale carousel + category tiles. `category/[categoryId]`: products grouped into
+  subcategory sections with a sticky chip bar and filters (`use-product-filters.ts`).
+  `cart/page.tsx`: the cart, then "continue to payment" opens the checkout window.
+- Server components read Prisma directly (no fetch round-trip) and pass `toPublicProduct` data to
+  client components.
 
-**i18n (Hebrew/Arabic, both RTL)**: no third-party i18n library — a lightweight custom setup under
-`src/lib/i18n/`. `locales.ts` defines the two supported locales (both RTL; there's no LTR locale
-yet, so `dir` is always `"rtl"` today, but code reads `LOCALE_DIR[locale]` rather than hardcoding
-that). `dictionaries.ts` holds plain nested-object translations for fixed UI copy only — product
-names/descriptions and admin-created category/coupon names are intentionally left untranslated
-(single language, per-product translations are a future feature). `get-locale.ts` is
-server-only (reads the `locale` cookie via `next/headers`); `cookie.ts` just holds the cookie
-name constant so client code (`locale-provider.tsx`) can read/write the cookie without pulling in
-`next/headers` (that import fails outside Server Components — keep it out of anything client-side).
+### Orders (`POST /api/orders`, public)
 
-The root layout (`src/app/layout.tsx`) reads the cookie once, sets `<html lang dir>` accordingly
-(defaults to `he`/`rtl` with no cookie), and seeds the client `LocaleProvider` with that same
-value so SSR and first client render agree (no hydration mismatch, no flash of wrong direction).
-Everything else reads translations via the `useLocale()` hook (`t()`, dot-path keys, `{param}`
-interpolation) — client components only. The one exception is `/admin` (`page.tsx`), which stays
-a Server Component for its Prisma/QR-code data fetching and delegates all rendering to a client
-`DashboardContent` component so it can use `useLocale()` too; follow that split (fetch server-side,
-render + translate client-side) rather than reading the cookie again in more Server Components.
+Validates (zod), rate-limits per IP and per phone (`src/lib/rate-limit.ts`, in-memory — fine for a
+single Railway instance), checks the Israeli phone (`src/lib/phone.ts`), re-derives coupons, rejects
+`CREDIT` (`credit_unavailable` — no payment provider yet) and `PAY_LATER` without a used coupon,
+then in one transaction deducts stock and creates the order with snapshots. Afterwards it builds
+the PDF (`src/lib/order-pdf.tsx`, react-pdf, Hebrew font) and emails it. **Notification failures
+never fail the order** — the order is always saved; `emailSentAt`/`whatsappSentAt` stay null and the
+error is returned so the admin can see it. Keep that non-blocking behaviour.
 
-`setLocale()` in `locale-provider.tsx` updates React state, writes `document.documentElement`
-`lang`/`dir` immediately (instant UI flip, no reload), sets the cookie, and calls
-`router.refresh()` so any Server Component data on the page re-renders consistently.
+### Admin (`src/app/admin/`)
 
-RTL layout mirroring relies on two things: (1) CSS flexbox/grid `justify-between` etc. already
-mirror automatically under `dir="rtl"` — most of the app needed no changes; (2) directional
-Tailwind utilities were converted to logical ones (`ps-`/`pe-` not `pl-`/`pr-`, `ms-`/`me-` not
-`ml-`/`mr-`, `start-`/`end-` not `left-`/`right-`). When adding new UI, use the logical utilities
-from the start rather than physical left/right ones, or RTL will silently break for that spot.
+NextAuth Credentials, JWT sessions (`src/lib/auth.ts`). `src/middleware.ts` protects `/admin` and
+everything under it except login, forgot/reset password and the app icons. `idle-logout.tsx` signs
+out after 2 hours without activity (shared across tabs via localStorage). Pages: dashboard (QR
+code to `NEXT_PUBLIC_SITE_URL`, counts), products (categories with images and drag order;
+subcategories card = add/delete/drag subcategories, arrange products per subcategory, bulk
+stock/move/delete/merge/unmerge; product list with search, category filter, low-stock filter, edit
+modal), orders (status, cancelled-only delete, per-item coupons, VAT), coupons (scope: whole order or
+categories), pay-later (debts grouped by customer, mark paid). Admin pages are client components
+calling the JSON API routes; destructive actions go through `useConfirm()`, feedback through
+`useToast()`. Mutating API routes check `getServerSession`.
 
-## Environment
+### i18n (Hebrew/Arabic, both RTL)
 
-See `.env.example` for the full list. Required to actually deliver WhatsApp notifications:
-`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WAREHOUSE_OWNER_PHONE`. Without these set, orders
-still work end-to-end but `sendOrderWhatsAppMessage` throws and the order is saved with no
-notification sent — this is expected/handled, not a bug.
+No library: `src/lib/i18n/` — `dictionaries.ts` (all fixed UI copy, both languages; add every new
+string to **both**), `locales.ts`, `get-locale.ts` (server-only, reads the `locale` cookie),
+`cookie.ts` (cookie name, safe for client code). The root layout sets `<html lang dir>` from the
+cookie and seeds `LocaleProvider`; client components use `useLocale().t("dot.path", {params})`.
+Product, category and coupon names are not translated. Use logical Tailwind utilities (`ps-`/`pe-`,
+`ms-`/`me-`, `start-`/`end-`), never `pl-`/`left-` etc., or RTL breaks. `/admin` (`page.tsx`) is the
+pattern for server data + translated client rendering (`dashboard-content.tsx`).
+
+### Branding
+
+`src/lib/branding.ts` reads `NEXT_PUBLIC_WAREHOUSE_NAME`, `_LOGO_URL`, `_ACCENT_COLOR`,
+`_SECONDARY_COLOR`, `_CONTACT_PHONE`; the root layout exposes the colours as CSS variables
+`--accent` / `--secondary`. Use `var(--accent)` for selected/primary states (not black). The page
+background is fixed light in `globals.css` — do not add a `prefers-color-scheme: dark` override
+(it once turned the site black for dark-mode visitors). Both the shop and admin have PWA manifests
+and icons.
+
+## Working conventions
+
+- Hebrew in shell arguments gets mangled on Windows (Git Bash → `????`). Put Hebrew in files
+  (scripts, JSON) rather than in `curl -d '...'` arguments.
+- Commit only when asked; end commit messages with the attribution lines the session provides.
