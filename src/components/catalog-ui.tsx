@@ -6,6 +6,7 @@ import { useLocale } from "@/components/locale-provider";
 import { optimizedImage } from "@/lib/image-url";
 import { getEffectivePrice, getSalePercentOff } from "@/lib/effective-price";
 import { asProductUnit } from "@/lib/product-unit";
+import { useBuyer } from "@/components/buyer-context";
 
 export type Category = {
   id: string;
@@ -23,7 +24,8 @@ export type Product = {
   id: string;
   name: string;
   description: string | null;
-  price: number;
+  /** Null for guests: prices are only sent to logged-in buyers. */
+  price: number | null;
   imageUrl: string | null;
   inStock: boolean;
   onSale: boolean;
@@ -195,7 +197,8 @@ export function OptionPicker({
 /** "From ₪X" while no option is chosen and the options' prices differ. */
 function FromPrice({ options }: { options: Product[] }) {
   const { t } = useLocale();
-  const prices = options.map(getEffectivePrice);
+  const prices = options.map(getEffectivePrice).filter((p): p is number => p != null);
+  if (prices.length === 0) return null; // a guest: no prices
   const min = Math.min(...prices);
   return (
     <p className="text-sm font-bold text-[#1a1714] flex items-baseline gap-1 flex-wrap">
@@ -279,6 +282,8 @@ export function ShopCard({
 
 function PriceDisplay({ product, size = "sm" }: { product: Product; size?: "sm" | "lg" }) {
   const { t } = useLocale();
+  // Guests: no price at all (the header's login button shows them).
+  if (product.price == null) return null;
   const isOnSale = product.onSale && product.salePrice != null;
   const priceClass = size === "lg" ? "text-xl font-bold" : "text-sm font-bold";
   // "/ קרטון": what the price is for.
@@ -324,6 +329,7 @@ export function AddToCartControl({
   size?: "sm" | "lg";
 }) {
   const { t } = useLocale();
+  const { openLogin } = useBuyer();
   const [quantityInput, setQuantityInput] = useState(String(quantity));
 
   useEffect(() => {
@@ -351,6 +357,9 @@ export function AddToCartControl({
       </span>
     );
   }
+
+  // Guests can't order (no prices): the cart button opens the login window.
+  if (product.price == null) onAdd = openLogin;
 
   if (quantity === 0) {
     if (size === "lg") {

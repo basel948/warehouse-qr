@@ -2,9 +2,10 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CHECKOUT_LIMITS } from "@/lib/checkout-limits";
-import { isValidIsraeliPhone } from "@/lib/phone";
+import { formatLocalPhone, isValidIsraeliPhone } from "@/lib/phone";
+import { BuyerContext, type ShopBuyer } from "@/components/buyer-context";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { BackButton } from "@/components/back-button";
 import { BackToTop } from "@/components/back-to-top";
 import { BrandLogo } from "@/components/brand-logo";
@@ -14,6 +15,9 @@ import {
   ClockIcon,
   CreditCardIcon,
   PhoneIcon,
+  LogOutIcon,
+  StoreIcon,
+  ChevronDownIcon,
   SearchIcon,
 } from "@/components/icons";
 import { LanguageSwitcher } from "@/components/language-switcher";
@@ -23,6 +27,7 @@ import { PAYMENT_METHOD, type PaymentMethod } from "@/lib/payment-method";
 import { type Product, ProductDetailModal, ShopCard, groupIntoCards } from "@/components/catalog-ui";
 import { getEffectivePrice } from "@/lib/effective-price";
 import { VAT_PERCENT, bestCouponFor, calculateOrderTotals, type CouponRule } from "@/lib/order-totals";
+import { backdropCloseProps } from "@/lib/backdrop-close";
 
 const CART_STORAGE_KEY = "warehouse-cart";
 
@@ -62,9 +67,20 @@ function compareProductNames(a: Product, b: Product): number {
   return a.name.localeCompare(b.name, "he");
 }
 
-export function StorefrontShell({ children }: { children: React.ReactNode }) {
+export function StorefrontShell({
+  children,
+  buyer,
+  customerTypes,
+}: {
+  children: React.ReactNode;
+  /** The logged-in buyer (from the server), or null for a guest. */
+  buyer: ShopBuyer | null;
+  customerTypes: { id: string; name: string; icon: string }[];
+}) {
   const { t } = useLocale();
   const pathname = usePathname();
+  const router = useRouter();
+  const [loginOpen, setLoginOpen] = useState(false);
   const [cart, setCart] = useState<Record<string, number>>({});
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [expandedProduct, setExpandedProduct] = useState<Product | null>(null);
@@ -131,6 +147,19 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // After logging in or out the prices change: re-render the server pages
+  // and reload the product list used by search, the cart and checkout.
+  async function afterLoginChange() {
+    router.refresh();
+    const res = await fetch("/api/products");
+    setAllProducts(await res.json());
+  }
+
+  async function logout() {
+    await fetch("/api/buyer/logout", { method: "POST" });
+    await afterLoginChange();
+  }
+
   function addToCart(productId: string) {
     setCart((prev) => ({ ...prev, [productId]: (prev[productId] ?? 0) + 1 }));
   }
@@ -164,7 +193,7 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
 
   const cartCount = Object.values(cart).reduce((sum, qty) => sum + qty, 0);
   const cartTotal = (allProducts ?? []).reduce(
-    (sum, product) => sum + (cart[product.id] ?? 0) * getEffectivePrice(product),
+    (sum, product) => sum + (cart[product.id] ?? 0) * (getEffectivePrice(product) ?? 0),
     0
   );
 
@@ -193,6 +222,7 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
   };
 
   return (
+    <BuyerContext.Provider value={{ buyer, openLogin: () => setLoginOpen(true) }}>
     <CartContext.Provider value={contextValue}>
       <div className="min-h-screen bg-[#f7f5f1] pb-28">
         <header ref={headerRef} className="sticky top-0 z-10 bg-white border-b border-[#eae5dc]">
@@ -202,9 +232,23 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
                 <BrandLogo />
               </Link>
               <div className="flex items-center gap-3">
-                <button onClick={scrollToContact} className="text-[13px] font-semibold text-[#6b6259]">
-                  {t("catalog.contactUs")}
-                </button>
+                {/* Guests see no prices; logging in shows their type's prices. */}
+                {/* Logged in: "contact us" moves into the account menu. */}
+                {buyer ? (
+                  <AccountMenu buyer={buyer} onContact={scrollToContact} onLogout={logout} />
+                ) : (
+                  <>
+                    <button
+                      onClick={() => setLoginOpen(true)}
+                      className="text-[13px] font-semibold text-[var(--accent)] border border-[var(--accent)] rounded-full px-3.5 py-1.5"
+                    >
+                      {t("buyer.login")}
+                    </button>
+                    <button onClick={scrollToContact} className="text-[13px] font-semibold text-[#6b6259]">
+                      {t("catalog.contactUs")}
+                    </button>
+                  </>
+                )}
                 <LanguageSwitcher />
               </div>
             </div>
@@ -279,7 +323,7 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
 
         {/* Floating "to cart" bar on every shop page except the cart itself,
             which has its own "continue to payment" button. */}
-        {cartCount > 0 && !checkoutOpen && pathname !== "/cart" && (
+        {buyer && cartCount > 0 && !checkoutOpen && pathname !== "/cart" && (
           <div className="fixed bottom-0 inset-x-0 z-20 px-3.5 pt-4 pb-4 bg-gradient-to-t from-[#f7f5f1] from-[62%] to-transparent flex justify-center">
             <Link
               href="/cart"
@@ -313,8 +357,13 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
         <BackToTop bottomClass={cartCount > 0 ? "bottom-24" : "bottom-5"} />
         <BackButton homeHref="/" bottomClass={cartCount > 0 ? "bottom-24" : "bottom-5"} />
 
-        {checkoutOpen && allProducts && (
+        {checkoutOpen && allProducts && buyer && (
           <CheckoutSheet
+            buyer={buyer}
+            onLoginNeeded={() => {
+              setCheckoutOpen(false);
+              setLoginOpen(true);
+            }}
             products={allProducts}
             cart={cart}
             subtotal={cartTotal}
@@ -344,7 +393,18 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
           />
         )}
 
-        {resumePromptOpen && (
+        {loginOpen && (
+          <LoginDialog
+            customerTypes={customerTypes}
+            initialPhone={buyer ? formatLocalPhone(buyer.phone) : ""}
+            initialTypeId={buyer?.customerType.id ?? ""}
+            onClose={() => setLoginOpen(false)}
+            onLoggedIn={afterLoginChange}
+          />
+        )}
+
+        {/* Only for buyers: a guest can't see prices or order anyway. */}
+        {buyer && resumePromptOpen && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center bg-[#1a1714]/55">
             <div className="w-full sm:max-w-sm bg-white rounded-t-[22px] sm:rounded-2xl p-[22px] text-center">
               <div className="w-[38px] h-1 rounded-full bg-[#e0d9cf] mx-auto mb-4 sm:hidden" aria-hidden />
@@ -371,6 +431,318 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
         )}
       </div>
     </CartContext.Provider>
+    </BuyerContext.Provider>
+  );
+}
+
+// Logged-in buyer: a pill with their name; tapping it
+// opens a small menu with their name, phone, contact us and log out.
+function AccountMenu({
+  buyer,
+  onContact,
+  onLogout,
+}: {
+  buyer: ShopBuyer;
+  onContact: () => void;
+  onLogout: () => void;
+}) {
+  const { t } = useLocale();
+  const [open, setOpen] = useState(false);
+  // Kept on screen briefly after closing so the menu can animate out.
+  const [closing, setClosing] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  function close() {
+    setOpen(false);
+    setClosing(true);
+  }
+
+  useEffect(() => {
+    if (!closing) return;
+    const timer = setTimeout(() => setClosing(false), 130);
+    return () => clearTimeout(timer);
+  }, [closing]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointer(e: PointerEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) close();
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") close();
+    }
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const displayName = buyer.name || buyer.businessName;
+  const items = [
+    { label: t("catalog.contactUs"), icon: PhoneIcon, onClick: onContact, danger: false },
+    { label: t("buyer.logout"), icon: LogOutIcon, onClick: onLogout, danger: true },
+  ];
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => (open ? close() : (setClosing(false), setOpen(true)))}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={t("buyer.accountMenu")}
+        className={`flex items-center gap-1 text-[13px] font-semibold border border-[var(--accent)] rounded-full ps-3.5 pe-2.5 py-1.5 transition-colors duration-150 active:scale-95 ${
+          open ? "bg-[var(--accent)] text-white" : "text-[var(--accent)]"
+        }`}
+      >
+        {/* Their name (remembered from their last order); before a first order: business or phone. */}
+        <span className="block max-w-[110px] truncate" dir={displayName ? undefined : "ltr"}>
+          {displayName || formatLocalPhone(buyer.phone)}
+        </span>
+        <ChevronDownIcon
+          className={`w-3.5 h-3.5 shrink-0 transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {(open || closing) && (
+        <div
+          role="menu"
+          data-closing={closing || undefined}
+          className="menu-pop absolute top-full mt-2.5 end-0 z-20 w-64 bg-white border border-[var(--accent)] rounded-2xl shadow-[0_12px_32px_-8px_rgba(26,23,20,0.28)]"
+        >
+          {/* The little arrow pointing up at the button. */}
+          <span
+            aria-hidden
+            className="absolute -top-[6px] end-6 w-3 h-3 rotate-45 bg-white border-t border-s border-[var(--accent)]"
+          />
+          <div className="relative flex items-center gap-3 px-4 pt-4 pb-3.5">
+            <span
+              aria-hidden
+              className="w-10 h-10 shrink-0 rounded-full bg-[var(--accent)] text-white flex items-center justify-center"
+            >
+              <StoreIcon className="w-5 h-5" />
+            </span>
+            <div className="min-w-0">
+              {displayName && <p className="font-bold text-[15px] text-[#1a1714] truncate">{displayName}</p>}
+              <p dir="ltr" className="text-[13px] text-[#8a8177] text-end">
+                {formatLocalPhone(buyer.phone)}
+              </p>
+            </div>
+          </div>
+          <div className="border-t border-[#f2efe9] p-1.5">
+            {items.map((item, i) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    close();
+                    item.onClick();
+                  }}
+                  style={{ animationDelay: `${60 + i * 50}ms` }}
+                  className={`menu-item w-full flex items-center gap-2.5 text-start rounded-xl px-2.5 py-2.5 text-sm font-semibold transition-colors active:scale-[0.98] ${
+                    item.danger ? "text-[#b3402e] hover:bg-[#fbf1ef]" : "text-[#1a1714] hover:bg-[#f7f5f1]"
+                  }`}
+                >
+                  <span
+                    className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center ${
+                      item.danger ? "bg-[#fbf1ef]" : "bg-[#f7f5f1] text-[var(--accent)]"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                  </span>
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Shop login: phone + what kind of business (the customer type decides the
+// prices). No code or verification yet, by the owner's choice. The types are
+// big cards with the icon the owner picked in the admin.
+const WELCOME_MS = 1400;
+
+function LoginDialog({
+  customerTypes,
+  initialPhone,
+  initialTypeId,
+  onClose,
+  onLoggedIn,
+}: {
+  customerTypes: { id: string; name: string; icon: string }[];
+  initialPhone: string;
+  initialTypeId: string;
+  onClose: () => void;
+  /** Reloads the prices; the window then shows a short welcome and closes itself. */
+  onLoggedIn: () => Promise<void>;
+}) {
+  const { t } = useLocale();
+  const [phone, setPhone] = useState(initialPhone);
+  const [typeId, setTypeId] = useState(initialTypeId);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [welcomeType, setWelcomeType] = useState<string | null>(null);
+  // Plays the closing animation, then really closes.
+  const [closing, setClosing] = useState(false);
+  const requestClose = () => setClosing(true);
+
+  useEffect(() => {
+    if (!closing) return;
+    const timer = setTimeout(onClose, 160);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [closing]);
+
+  useEffect(() => {
+    if (!welcomeType) return;
+    const timer = setTimeout(requestClose, WELCOME_MS);
+    return () => clearTimeout(timer);
+    // Only when the welcome appears: onClose is a new function on every
+    // parent render (the price reload re-renders it), which would restart the timer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [welcomeType]);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!isValidIsraeliPhone(phone)) {
+      setError(t("checkout.errorInvalidPhone"));
+      return;
+    }
+    if (!typeId) {
+      setError(t("buyer.errorMissingType"));
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/buyer/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone, customerTypeId: typeId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data.error === "invalid_phone") setError(t("checkout.errorInvalidPhone"));
+        else if (data.error === "too_many_attempts") setError(t("buyer.errorTooMany"));
+        else setError(t("buyer.errorFailed"));
+        return;
+      }
+      setWelcomeType(customerTypes.find((type) => type.id === typeId)?.name ?? "");
+      await onLoggedIn();
+    } catch {
+      setError(t("buyer.errorFailed"));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div
+      data-closing={closing || undefined}
+      className="dialog-backdrop fixed inset-0 z-40 flex items-center justify-center p-4 bg-[#1a1714]/55"
+      onClick={requestClose}
+    >
+      <form
+        role="dialog"
+        aria-modal="true"
+        aria-label={t("buyer.loginTitle")}
+        onSubmit={submit}
+        onClick={(e) => e.stopPropagation()}
+        className="dialog-pop relative w-full max-w-sm bg-white border-2 border-[var(--accent)] rounded-3xl p-[22px] shadow-[0_24px_60px_-12px_rgba(26,23,20,0.45)] max-h-[90dvh] overflow-y-auto overscroll-contain"
+      >
+        <button
+          type="button"
+          onClick={requestClose}
+          aria-label={t("checkout.close")}
+          className="absolute top-3.5 end-3.5 w-[30px] h-[30px] rounded-full bg-[#f2efe9] text-[#6b6259] flex items-center justify-center text-base transition-transform hover:rotate-90 active:scale-90"
+        >
+          ×
+        </button>
+
+        {welcomeType != null ? (
+          <div className="py-6 text-center" role="status">
+            <div className="tick-pop w-[52px] h-[52px] rounded-full bg-[#f1f7f1] text-[#2f6b3a] flex items-center justify-center mx-auto mb-3.5">
+              <CheckIcon className="w-6 h-6" />
+            </div>
+            <p className="menu-item font-bold text-[17px] text-[#1a1714]" style={{ animationDelay: "150ms" }}>
+              {t("buyer.welcome", { type: welcomeType })}
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex justify-center mb-3 mt-1">
+              <BrandLogo />
+            </div>
+            <h2 className="text-[19px] font-bold text-[#1a1714] text-center mb-5">{t("buyer.loginTitle")}</h2>
+
+            {customerTypes.length === 0 ? (
+              <p className="text-sm text-[#b3402e] text-center">{t("buyer.noTypesYet")}</p>
+            ) : (
+              <>
+                <div className="relative mb-4">
+                  <PhoneIcon className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--accent)]" />
+                  <input
+                    type="tel"
+                    placeholder={t("checkout.phonePlaceholder")}
+                    value={phone}
+                    maxLength={CHECKOUT_LIMITS.phone}
+                    inputMode="tel"
+                    autoComplete="tel"
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="w-full border-2 border-[color-mix(in_srgb,var(--accent)_55%,white)] rounded-xl ps-10 pe-3.5 py-3 bg-white placeholder:text-[#a39a8e] outline-none transition-[border-color,box-shadow] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_22%,transparent)]"
+                  />
+                </div>
+
+                <p className="text-[13px] font-semibold text-[#6b6259] mb-2">{t("buyer.typeLabel")}</p>
+                <div role="radiogroup" aria-label={t("buyer.typeLabel")} className="grid grid-cols-3 gap-2 mb-4">
+                  {customerTypes.map((type, i) => {
+                    const selected = type.id === typeId;
+                    return (
+                      <button
+                        key={type.id}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => setTypeId(type.id)}
+                        style={{ animationDelay: `${120 + i * 45}ms` }}
+                        className={`menu-item flex flex-col items-center justify-center gap-1 rounded-xl border-2 px-1.5 py-3 text-[12.5px] font-semibold leading-tight text-center transition-[color,background-color,border-color,transform] active:scale-95 ${
+                          selected
+                            ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_12%,white)] text-[#1a1714]"
+                            : "border-[color-mix(in_srgb,var(--accent)_55%,white)] bg-white text-[#4a443c] hover:border-[var(--accent)]"
+                        }`}
+                      >
+                        <span className="text-[26px] leading-none" aria-hidden>
+                          {type.icon}
+                        </span>
+                        {type.name}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="w-full bg-[var(--accent)] text-white rounded-xl py-[14px] font-semibold text-base transition-transform active:scale-[0.98] disabled:opacity-50"
+                >
+                  {submitting ? t("buyer.loggingIn") : t("buyer.login")}
+                </button>
+                {error && <p className="text-sm text-[#b3402e] mt-2">{error}</p>}
+                <p className="text-xs text-[#8a8177] text-center mt-3">{t("buyer.rememberedNote")}</p>
+              </>
+            )}
+          </>
+        )}
+      </form>
+    </div>
   );
 }
 
@@ -378,12 +750,16 @@ export function StorefrontShell({ children }: { children: React.ReactNode }) {
 type AppliedCoupon = CouponRule & { categoryNames: string[] };
 
 function CheckoutSheet({
+  buyer,
+  onLoginNeeded,
   products,
   cart,
   subtotal,
   onClose,
   onOrdered,
 }: {
+  buyer: ShopBuyer;
+  onLoginNeeded: () => void;
   products: Product[];
   cart: Record<string, number>;
   subtotal: number;
@@ -401,9 +777,10 @@ function CheckoutSheet({
     };
   }, []);
 
-  const [customerName, setCustomerName] = useState("");
-  const [businessName, setBusinessName] = useState("");
-  const [customerPhone, setCustomerPhone] = useState("");
+  // Filled in from the login (phone) and the buyer's last order (name, business).
+  const [customerName, setCustomerName] = useState(buyer.name);
+  const [businessName, setBusinessName] = useState(buyer.businessName);
+  const [customerPhone, setCustomerPhone] = useState(formatLocalPhone(buyer.phone));
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   // Card payment isn't connected to a payment provider yet: tapping "credit"
   // only shows a notice and never selects it (the orders API rejects it too).
@@ -435,7 +812,7 @@ function CheckoutSheet({
           coupons
         );
         return {
-          price: getEffectivePrice(product),
+          price: getEffectivePrice(product) ?? 0,
           quantity,
           couponCode: coupon?.code,
           discountPercent: coupon?.discountPercent,
@@ -545,6 +922,10 @@ function CheckoutSheet({
 
       const data = await res.json();
       if (!res.ok) {
+        if (data.error === "login_required") {
+          onLoginNeeded();
+          return;
+        }
         if (data.error === "invalid_phone") setError(t("checkout.errorInvalidPhone"));
         else if (data.error === "insufficient_stock")
           setError(
@@ -580,7 +961,16 @@ function CheckoutSheet({
   return (
     // A centered window on every screen size. The dark overlay covers the whole
     // page, so nothing behind it can be tapped while checkout is open.
-    <div className="fixed inset-0 z-30 flex items-center justify-center p-4 bg-[#1a1714]/55">
+    // Clicking outside closes it (after an order: same as the "done" button);
+    // not while the order is being sent.
+    <div
+      className="fixed inset-0 z-30 flex items-center justify-center p-4 bg-[#1a1714]/55"
+      {...backdropCloseProps(() => {
+        if (submitting) return;
+        if (success) onOrdered();
+        else onClose();
+      })}
+    >
       <div
         role="dialog"
         aria-modal="true"

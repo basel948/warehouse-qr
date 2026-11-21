@@ -6,6 +6,7 @@ import { PackageIcon, TrashIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 import { PageBackLink } from "@/components/page-back-link";
 import { useCart } from "@/components/storefront-shell";
+import { useBuyer } from "@/components/buyer-context";
 import { getEffectivePrice } from "@/lib/effective-price";
 import { optimizedImage } from "@/lib/image-url";
 import { asProductUnit } from "@/lib/product-unit";
@@ -15,10 +16,31 @@ import { asProductUnit } from "@/lib/product-unit";
 export default function CartPage() {
   const { t } = useLocale();
   const { cart, setQuantity, allProducts, cartTotal, openCheckout } = useCart();
+  const { buyer, openLogin } = useBuyer();
 
   const lines = (allProducts ?? [])
     .filter((product) => cart[product.id] > 0)
     .map((product) => ({ product, quantity: cart[product.id] }));
+
+  // Guests see no prices and can't order: ask them to log in first.
+  if (!buyer) {
+    return (
+      <div>
+        <PageBackLink href="/" title={t("cart.title")} />
+        <div className="bg-white border border-[#eae5dc] rounded-[14px] px-5 py-10 text-center">
+          <p className="font-semibold text-[#1a1714] mb-1">{t("buyer.cartLoginTitle")}</p>
+          <p className="text-sm text-[#6b6259] mb-5">{t("buyer.loginBody")}</p>
+          <button
+            type="button"
+            onClick={openLogin}
+            className="inline-block bg-[var(--accent)] text-white rounded-full px-6 py-2.5 text-sm font-semibold"
+          >
+            {t("buyer.login")}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!allProducts) {
     return (
@@ -53,7 +75,7 @@ export default function CartPage() {
 
       <ul className="bg-white border border-[#eae5dc] rounded-[14px] divide-y divide-[#f0ece5]">
         {lines.map(({ product, quantity }) => {
-          const unitPrice = getEffectivePrice(product);
+          const unitPrice = getEffectivePrice(product) ?? 0;
           return (
             <li key={product.id} className="flex gap-3 p-3">
               <div className="w-20 h-20 shrink-0 rounded-[10px] border border-[#f0ece5] bg-white flex items-center justify-center overflow-hidden">

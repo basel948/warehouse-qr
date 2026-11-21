@@ -95,6 +95,9 @@ model Product {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   orderItems    OrderItem[]
+  // This product's price for each customer type (school, restaurant…).
+  // A type without a row here pays `price` (the base price).
+  typePrices    ProductTypePrice[]
 }
 
 // One shop card holding several products as options. Its name is the card's
@@ -139,6 +142,11 @@ model Order {
   vatPercent      Int?
   createdAt       DateTime    @default(now())
   items           OrderItem[]
+  // The logged-in buyer who placed it, and their customer type's name at that
+  // moment (a snapshot, like the prices). Null on orders from before buyer login.
+  buyer            Buyer?   @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  buyerId          String?
+  customerTypeName String?
 }
 
 model OrderItem {
@@ -157,4 +165,43 @@ model OrderItem {
   // covered it), or null. Null on orders from before per-item coupons.
   couponCode      String?
   discountPercent Int?
+}
+
+// A kind of buyer with its own price list: school, restaurant, warehouse…
+// Managed by the owner in /admin/customers; buyers pick one when logging in.
+model CustomerType {
+  id        String             @id @default(cuid())
+  name      String
+  // Emoji shown on the type's card in the shop's login window (e.g. 🍽️).
+  icon      String             @default("🏢")
+  order     Int                @default(0)
+  createdAt DateTime           @default(now())
+  prices    ProductTypePrice[]
+  buyers    Buyer[]
+}
+
+// One product's price (before VAT) for one customer type.
+model ProductTypePrice {
+  product        Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId      String
+  customerType   CustomerType @relation(fields: [customerTypeId], references: [id], onDelete: Cascade)
+  customerTypeId String
+  price          Float
+
+  @@id([productId, customerTypeId])
+}
+
+// A buyer who logged in to see prices: identified by phone (normalised,
+// src/lib/phone.ts). The type is whatever they chose at login (there is no
+// verification yet). Name / business are remembered from their last order.
+model Buyer {
+  id             String        @id @default(cuid())
+  phone          String        @unique
+  customerType   CustomerType? @relation(fields: [customerTypeId], references: [id], onDelete: SetNull)
+  customerTypeId String?
+  name           String        @default("")
+  businessName   String        @default("")
+  lastLoginAt    DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  orders         Order[]
 }

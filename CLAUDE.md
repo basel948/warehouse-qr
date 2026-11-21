@@ -8,8 +8,9 @@ For *what* the product is and *why* it behaves the way it does (features, rules,
 
 **Royal Stock** (royalstockonline.com): a Next.js 14 (App Router) wholesale ordering site for a
 cleaning-supplies / disposables warehouse in Israel. A buyer scans a QR code (or opens the site),
-browses categories, fills a cart and submits an order with name + business name + phone. There are
-no buyer accounts. The order is saved, a PDF is generated and emailed to the owner (SendGrid). The
+browses categories, logs in with phone + customer type (school, restaurant…) to see prices (guests
+see none), fills a cart and submits an order with name + business name + phone. There are no buyer
+passwords. The order is saved, a PDF is generated and emailed to the owner (SendGrid). The
 owner manages everything in `/admin` (products, categories, coupons, orders, pay-later debts).
 The UI is Hebrew and Arabic, both right-to-left.
 
@@ -71,6 +72,10 @@ See `.env.example` for every variable.
   `src/lib/order-status.ts` and `src/lib/payment-method.ts` — use those constants.
 - `OrderItem.stockDeducted` records whether that line took stock, so cancelling returns exactly
   what was taken.
+- `CustomerType` (school, restaurant…, owner-managed; `icon` = an emoji shown on its card in the shop login) → `ProductTypePrice` (one product's price for
+  one type; no row = the product's base `price`). `Buyer`: normalised phone (unique) + the type they
+  chose at login; name/business remembered from their last order. `Order.buyerId` +
+  `Order.customerTypeName` (snapshot).
 - `Admin` + `PasswordResetToken` (hashed, 30-minute, single-use) for the owner's login.
 
 ### Money: `src/lib/order-totals.ts` is the single source of truth
@@ -82,6 +87,23 @@ that covers it (whole-order coupons cover everything; category coupons cover pro
 their categories). Coupons never stack on one item. The orders API re-derives every discount
 server-side from the DB; the client's preview is never trusted.
 
+### Buyer login and prices per customer type
+
+Guests see **no prices**. A buyer logs in with phone + a customer type from a dropdown
+(`POST /api/buyer/login`); there is no code/verification yet (owner's choice), so anyone can pick
+any type. The cookie (`src/lib/buyer-session.ts`) holds only the buyer id, HMAC-signed with
+`NEXTAUTH_SECRET`; `getCurrentBuyer()` reads the type from the DB. Shop product queries use
+`shopProductInclude(typeId)` and `toPublicProduct(product, typeId)` (`src/lib/public-product.ts`):
+guests get `price`/`salePrice` = null, a buyer gets only their type's prices via `priceForType()`
+(`src/lib/customer-price.ts`; a sale is the same % off for every type). The orders API requires a
+buyer (`login_required`) and charges `priceForType`. Client: `useBuyer()`
+(`src/components/buyer-context.tsx`) gives `buyer` + `openLogin`; when `price` is null the
+catalog shows no price and the cart button opens the login window (the header has a small
+"כניסה" button next to "צור קשר"). Admin: one menu entry, "לקוחות ומחירים", with two tabs
+(route group `src/app/admin/(customers)/`, shared `layout.tsx`): `/admin/customers` (types; buyers —
+the owner can add one by hand or change a buyer's type, but the type a buyer picks at login replaces
+it) and `/admin/prices` (pick a type, type each product's price; empty = base price).
+
 ### Stock: `src/lib/stock.ts`
 
 `deductStock` runs inside the order transaction with conditional decrements (no overselling under
@@ -90,7 +112,7 @@ is available. Reaching 0 sets `inStock = false`. `PATCH /api/orders/[id]` to CAN
 `restoreOrderStock`; reopening calls `redeductOrderStock` (floors at 0). Untracked products
 (`stockQuantity` null) are never touched.
 
-**Buyers never receive `stockQuantity`**: every product handed to the shop goes through
+**Buyers never receive `stockQuantity`** (nor other types' prices): every product handed to the shop goes through
 `toPublicProduct()` (`src/lib/public-product.ts`) — server components and the public
 `GET /api/products` (the admin, with a session, gets the full object). Keep that when adding new
 product queries for the shop. Product queries use `PRODUCT_INCLUDE` from `src/lib/variant-groups.ts`.

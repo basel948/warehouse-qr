@@ -6,6 +6,7 @@ type OrderEmailMessage = {
   customerName: string;
   businessName: string;
   customerPhone: string;
+  customerTypeName?: string | null;
   paymentMethod: PaymentMethod;
   totalBeforeVat: number;
   vatPercent: number | null;
@@ -53,6 +54,7 @@ export async function sendOrderEmail(order: OrderEmailMessage): Promise<void> {
             `שם מלא: ${order.customerName}`,
             `מעסיק מורשה / שם העסק: ${order.businessName || "-"}`,
             `מספר טלפון: ${order.customerPhone}`,
+            ...(order.customerTypeName ? [`סוג לקוח: ${order.customerTypeName}`] : []),
             `אופן תשלום: ${PAYMENT_METHOD_LABEL_HE[order.paymentMethod]}`,
             ...(order.vatPercent
               ? [

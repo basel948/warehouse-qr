@@ -25,10 +25,11 @@ function makeComparator(sortMode: SortMode): (a: Product, b: Product) => number 
       return () => 0;
     case "name-desc":
       return (a, b) => -compareProductNames(a, b);
+    // Guests have no prices (and no price sort); 0 keeps the order stable.
     case "price-asc":
-      return (a, b) => getEffectivePrice(a) - getEffectivePrice(b);
+      return (a, b) => (getEffectivePrice(a) ?? 0) - (getEffectivePrice(b) ?? 0);
     case "price-desc":
-      return (a, b) => getEffectivePrice(b) - getEffectivePrice(a);
+      return (a, b) => (getEffectivePrice(b) ?? 0) - (getEffectivePrice(a) ?? 0);
     case "name-asc":
     default:
       return compareProductNames;
@@ -47,6 +48,7 @@ export function useProductFilters(products: Product[]) {
     return products.filter((product) => {
       if (inStockOnly && !product.inStock) return false;
       const effectivePrice = getEffectivePrice(product);
+      if (effectivePrice == null) return true; // a guest: no price filter
       if (min !== null && !Number.isNaN(min) && effectivePrice < min) return false;
       if (max !== null && !Number.isNaN(max) && effectivePrice > max) return false;
       return true;

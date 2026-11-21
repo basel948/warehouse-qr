@@ -7,8 +7,9 @@ similar project (another shop, different look) can reuse the idea; `CLAUDE.md` c
 
 A wholesale warehouse (cleaning products, laundry, paper goods, disposables) gets a simple online
 ordering site instead of phone/WhatsApp orders. Buyers are mostly small businesses. A printed QR
-code in the warehouse opens the shop. There are **no buyer accounts**: a buyer browses, fills a
-cart and sends the order with their name, business name and phone. The owner receives the order
+code in the warehouse opens the shop. Prices are hidden from guests: a buyer logs in with their
+phone and what kind of business they are (school, restaurant, warehouse…), and sees that type's
+prices. Then they fill a cart and send the order with their name, business name and phone. The owner receives the order
 as a PDF by email and handles delivery and payment as usual.
 
 Two kinds of users:
@@ -64,8 +65,14 @@ Two kinds of users:
 
 ## Rules and decisions (and why)
 
-- **No buyer accounts.** Wholesale buyers order occasionally and on the phone; any login step loses
-  orders. Identity = name + business + phone per order.
+- **Prices per customer type, hidden from guests.** The owner charges each kind of business a
+  different price (a restaurant pays differently from a school). He creates the types and, per type,
+  each product's price (empty = the product's base price). Guests see products but no prices and
+  can't order. Login is deliberately light: phone + choosing the type from a dropdown, no password
+  and no verification, so **a buyer can pick any type** (the owner accepted this for now; every
+  phone and the type it chose is listed in the admin). The server only ever sends a buyer their own
+  type's prices. Locking a phone to a type (owner-assigned, or with a code) is the planned next step
+  if needed.
 - **Prices are entered and shown before VAT; VAT (18%) is added at checkout.** Matches how
   wholesale prices are quoted. Each order stores the VAT rate it was charged, so a future rate
   change never rewrites old orders. *Open question for the owner's accountant:* if private

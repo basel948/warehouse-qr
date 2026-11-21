@@ -1,14 +1,15 @@
 import { prisma } from "@/lib/prisma";
-import { toPublicProduct } from "@/lib/public-product";
+import { shopProductInclude, toPublicProduct } from "@/lib/public-product";
+import { getCurrentBuyer } from "@/lib/buyer-session";
 import { HomeCategoryGrid } from "./home-category-grid";
 import { SaleCarousel } from "@/components/sale-carousel";
-import { PRODUCT_INCLUDE } from "@/lib/variant-groups";
 
 export const dynamic = "force-dynamic";
 
 const SALE_PRODUCTS_LIMIT = 10;
 
 export default async function HomePage() {
+  const typeId = (await getCurrentBuyer())?.customerType.id ?? null;
   const categories = await prisma.category.findMany({
     orderBy: { order: "asc" },
     select: { id: true, name: true, imageUrl: true },
@@ -18,12 +19,12 @@ export default async function HomePage() {
     where: { onSale: true, salePrice: { not: null } },
     orderBy: { updatedAt: "desc" },
     take: SALE_PRODUCTS_LIMIT,
-    include: PRODUCT_INCLUDE,
+    include: shopProductInclude(typeId),
   });
 
   return (
     <div>
-      <SaleCarousel products={saleProducts.map(toPublicProduct)} />
+      <SaleCarousel products={saleProducts.map((p) => toPublicProduct(p, typeId))} />
       <HomeCategoryGrid categories={categories} />
     </div>
   );

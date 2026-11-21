@@ -19,13 +19,17 @@ export function AdminNav() {
     { href: "/admin", label: t("nav.dashboard") },
     { href: "/admin/products", label: t("nav.products") },
     { href: "/admin/orders", label: t("nav.orders") },
+    // One entry for both tabs (customers + price lists).
+    { href: "/admin/customers", label: t("nav.customers"), also: "/admin/prices" },
     { href: "/admin/coupons", label: t("nav.coupons") },
     { href: "/admin/pay-later", label: t("nav.payLater") },
   ];
 
-  const activeItem = navItems.find((item) =>
-    item.href === "/admin" ? pathname === "/admin" : pathname?.startsWith(item.href)
-  );
+  const isActive = (item: { href: string; also?: string }) =>
+    item.href === "/admin"
+      ? pathname === "/admin"
+      : Boolean(pathname?.startsWith(item.href) || (item.also && pathname?.startsWith(item.also)));
+  const activeItem = navItems.find(isActive);
 
   useEffect(() => {
     setOpen(false);
@@ -67,21 +71,23 @@ export function AdminNav() {
               type="button"
               onClick={() => setOpen((prev) => !prev)}
               aria-expanded={open}
-              className="flex items-center gap-1.5 text-sm font-medium px-3.5 py-1.5 rounded-full border border-[#1a1714] text-[#1a1714] hover:bg-[#f2efe9] transition-colors"
+              className={`flex items-center gap-1.5 text-sm font-semibold px-3.5 py-1.5 rounded-full border border-[var(--accent)] transition-colors active:scale-95 ${
+                open ? "bg-[var(--accent)] text-white" : "text-[var(--accent)] hover:bg-[#fdf6ea]"
+              }`}
             >
               {activeItem?.label ?? t("nav.pages")}
               <ChevronDownIcon className={`w-4 h-4 transition-transform ${open ? "rotate-180" : ""}`} />
             </button>
             {open && (
-              <div className="absolute top-full end-0 mt-1.5 min-w-[190px] bg-white border border-[#e6e0d6] rounded-[10px] shadow-lg p-1.5 z-20">
+              <div className="menu-pop absolute top-full end-0 mt-2 min-w-[200px] bg-white border border-[var(--accent)] rounded-2xl shadow-[0_12px_32px_-8px_rgba(26,23,20,0.28)] p-1.5 z-20">
                 {navItems.map((item) => (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`block text-sm font-medium px-3 py-2 rounded-[7px] transition-colors ${
+                    className={`block text-sm font-semibold px-3 py-2 rounded-[10px] transition-colors ${
                       activeItem?.href === item.href
-                        ? "bg-[#f2efe9] text-[#1a1714]"
-                        : "text-[#6b6259] hover:bg-[#f7f5f1] hover:text-[#1a1714]"
+                        ? "bg-[var(--accent)] text-white"
+                        : "text-[#4a443c] hover:bg-[#fdf6ea] hover:text-[var(--accent)]"
                     }`}
                   >
                     {item.label}
@@ -97,7 +103,7 @@ export function AdminNav() {
                 <button
                   type="button"
                   onClick={() => signOut({ callbackUrl: "/admin/login" })}
-                  className="w-full flex items-center gap-2 text-sm font-medium px-3 py-2 rounded-[7px] text-[#b3402e] hover:bg-[#fbf1ef] transition-colors"
+                  className="w-full flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-[10px] text-[#b3402e] hover:bg-[#fbf1ef] transition-colors"
                 >
                   <LogOutIcon className="w-4 h-4 rtl:-scale-x-100" />
                   {t("nav.signOut")}

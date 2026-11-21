@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocale } from "@/components/locale-provider";
+import { useBuyer } from "@/components/buyer-context";
 import { type SortMode } from "@/lib/use-product-filters";
 
 export function ProductFilterBar({
@@ -27,6 +28,8 @@ export function ProductFilterBar({
   clearFilters: () => void;
 }) {
   const { t } = useLocale();
+  // Guests see no prices, so there's nothing to filter or sort by price.
+  const showPrice = useBuyer().buyer != null;
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
@@ -39,6 +42,7 @@ export function ProductFilterBar({
         />
         {t("catalog.inStockOnlyFilter")}
       </label>
+      {showPrice && (
       <div className="flex items-center gap-1.5">
         <input
           type="number"
@@ -68,6 +72,7 @@ export function ProductFilterBar({
           </button>
         )}
       </div>
+      )}
       <select
         value={sortMode}
         onChange={(e) => setSortMode(e.target.value as SortMode)}
@@ -77,8 +82,8 @@ export function ProductFilterBar({
         <option value="featured">{t("catalog.sortFeatured")}</option>
         <option value="name-asc">{t("catalog.sortNameAsc")}</option>
         <option value="name-desc">{t("catalog.sortNameDesc")}</option>
-        <option value="price-asc">{t("catalog.sortPriceAsc")}</option>
-        <option value="price-desc">{t("catalog.sortPriceDesc")}</option>
+        {showPrice && <option value="price-asc">{t("catalog.sortPriceAsc")}</option>}
+        {showPrice && <option value="price-desc">{t("catalog.sortPriceDesc")}</option>}
       </select>
     </div>
   );

@@ -4,17 +4,27 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PRODUCT_UNIT } from "@/lib/product-unit";
-import { toPublicProduct } from "@/lib/public-product";
+import { shopProductInclude, toPublicProduct } from "@/lib/public-product";
+import { getCurrentBuyer } from "@/lib/buyer-session";
 import { PRODUCT_INCLUDE } from "@/lib/variant-groups";
 
 export async function GET() {
+  // The admin gets everything, including each customer type's prices.
+  const session = await getServerSession(authOptions);
+  if (session) {
+    const products = await prisma.product.findMany({
+      orderBy: { name: "asc" },
+      include: { ...PRODUCT_INCLUDE, typePrices: { select: { customerTypeId: true, price: true } } },
+    });
+    return NextResponse.json(products);
+  }
+  // Buyers: no stock quantity, and only their own type's prices (none for guests).
+  const typeId = (await getCurrentBuyer())?.customerType.id ?? null;
   const products = await prisma.product.findMany({
     orderBy: { name: "asc" },
-    include: PRODUCT_INCLUDE,
+    include: shopProductInclude(typeId),
   });
-  // Buyers never get the exact stock quantity; the admin does.
-  const session = await getServerSession(authOptions);
-  return NextResponse.json(session ? products : products.map(toPublicProduct));
+  return NextResponse.json(products.map((p) => toPublicProduct(p, typeId)));
 }
 
 const createProductSchema = z

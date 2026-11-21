@@ -8,6 +8,8 @@ import { generateOrderPdf, generateOrderReceiptPdf } from "@/lib/order-pdf";
 import { sendOrderEmail } from "@/lib/order-email";
 import { sendOrderPdfWhatsAppMessage } from "@/lib/whatsapp";
 import { getEffectivePrice } from "@/lib/effective-price";
+import { priceForType } from "@/lib/customer-price";
+import { getCurrentBuyer } from "@/lib/buyer-session";
 import { CHECKOUT_LIMITS } from "@/lib/checkout-limits";
 import { isValidIsraeliPhone, normalizeIsraeliPhone } from "@/lib/phone";
 import { clientIp, recordHit, retryAfterSeconds } from "@/lib/rate-limit";
@@ -76,6 +78,13 @@ export async function POST(request: Request) {
 
   const { customerName, businessName, customerPhone, paymentMethod, couponCode, couponCodes, items } = parsed.data;
 
+  // Prices depend on the buyer's customer type, so only logged-in buyers can
+  // order (guests don't see prices at all).
+  const buyer = await getCurrentBuyer();
+  if (!buyer) {
+    return NextResponse.json({ error: "login_required" }, { status: 401 });
+  }
+
   if (!isValidIsraeliPhone(customerPhone)) {
     return NextResponse.json({ error: "invalid_phone" }, { status: 400 });
   }
@@ -93,7 +102,11 @@ export async function POST(request: Request) {
   const productIds = items.map((item) => item.productId);
   const products = await prisma.product.findMany({
     where: { id: { in: productIds } },
-    include: { categories: { select: { id: true } } },
+    include: {
+      categories: { select: { id: true } },
+      // This buyer's type's price (none = the base price applies).
+      typePrices: { where: { customerTypeId: buyer.customerType.id }, select: { price: true } },
+    },
   });
 
   if (products.length !== productIds.length) {
@@ -155,6 +168,11 @@ export async function POST(request: Request) {
   recordHit(ipKey, ORDER_WINDOW_MS);
   recordHit(phoneKey, ORDER_WINDOW_MS);
 
+  // What this buyer pays for a product: their type's price (or the base
+  // price), with any sale applied - the same as the shop showed them.
+  const buyerPrice = (product: (typeof products)[number]) =>
+    getEffectivePrice({ ...product, ...priceForType(product, product.typePrices[0]?.price) });
+
   // Stock is taken off and the order saved together: if any tracked product
   // is short, nothing is saved and the buyer is told what's available.
   let order;
@@ -170,11 +188,13 @@ export async function POST(request: Request) {
           paymentMethod,
           couponCode: appliedCouponCode,
           vatPercent: VAT_PERCENT,
+          buyerId: buyer.id,
+          customerTypeName: buyer.customerType.name,
           items: {
             create: items.map((item) => ({
               productId: item.productId,
               quantity: item.quantity,
-              price: getEffectivePrice(productById.get(item.productId)!),
+              price: buyerPrice(productById.get(item.productId)!),
               stockDeducted: stock.deducted.has(item.productId),
               couponCode: couponByProduct.get(item.productId)?.code ?? null,
               discountPercent: couponByProduct.get(item.productId)?.discountPercent ?? null,
@@ -197,6 +217,11 @@ export async function POST(request: Request) {
     throw error;
   }
 
+  // Remembered so the next checkout is filled in already.
+  await prisma.buyer
+    .update({ where: { id: buyer.id }, data: { name: customerName, businessName } })
+    .catch(() => {});
+
   const subtotal = order.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   // Prices are before VAT; the buyer pays the total including VAT.
   const totals = calculateOrderTotals(order.items, null, order.vatPercent);
@@ -212,6 +237,7 @@ export async function POST(request: Request) {
       customerName: order.customerName,
       businessName: order.businessName,
       customerPhone: order.customerPhone,
+      customerTypeName: order.customerTypeName,
       paymentMethod: order.paymentMethod as PaymentMethod,
       items: order.items.map((item) => ({
         productName: item.product.name,
@@ -242,6 +268,7 @@ export async function POST(request: Request) {
             customerName: order.customerName,
             businessName: order.businessName,
             customerPhone: order.customerPhone,
+            customerTypeName: order.customerTypeName,
             paymentMethod: order.paymentMethod as PaymentMethod,
             items: order.items.map((item) => ({
               productName: item.product.name,
@@ -325,6 +352,7 @@ export async function POST(request: Request) {
         customerName: order.customerName,
         businessName: order.businessName,
         customerPhone: order.customerPhone,
+        customerTypeName: order.customerTypeName,
         paymentMethod: order.paymentMethod as PaymentMethod,
         totalBeforeVat: totals.totalBeforeVat,
         vatPercent: totals.vatPercent,

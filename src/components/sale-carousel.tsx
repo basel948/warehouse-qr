@@ -116,12 +116,15 @@ export function SaleCarousel({ products }: { products: Product[] }) {
                 </div>
                 <div className="p-4 sm:p-3">
                   <p className="text-sm font-medium text-[#2b2620] line-clamp-1 mb-1">{product.name}</p>
-                  <p className="text-base font-bold flex items-center gap-1.5">
-                    <span className="text-[#b3402e]">₪{product.salePrice!.toFixed(2)}</span>
-                    <span className="text-[#a39a8e] font-medium line-through text-sm">
-                      ₪{product.price.toFixed(2)}
-                    </span>
-                  </p>
+                  {/* Guests get no prices, so nothing is shown under the name. */}
+                  {product.price != null && product.salePrice != null && (
+                    <p className="text-base font-bold flex items-center gap-1.5">
+                      <span className="text-[#b3402e]">₪{product.salePrice.toFixed(2)}</span>
+                      <span className="text-[#a39a8e] font-medium line-through text-sm">
+                        ₪{product.price.toFixed(2)}
+                      </span>
+                    </p>
+                  )}
                 </div>
               </button>
             );

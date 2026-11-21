@@ -25,3 +25,11 @@ export function isValidIsraeliPhone(phone: string): boolean {
   if (!/^[\d\s\-+()]+$/.test(phone.trim())) return false;
   return /^972(?:[57]\d{8}|[23489]\d{7})$/.test(normalizeIsraeliPhone(phone));
 }
+
+/** "972501234567" -> "050-1234567" (mobile) / "02-1234567" (landline), for display. */
+export function formatLocalPhone(normalized: string): string {
+  if (!normalized.startsWith("972")) return normalized;
+  const local = `0${normalized.slice(3)}`;
+  const split = /^0[57]/.test(local) ? 3 : 2;
+  return `${local.slice(0, split)}-${local.slice(split)}`;
+}

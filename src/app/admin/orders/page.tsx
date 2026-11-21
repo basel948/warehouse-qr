@@ -23,6 +23,8 @@ type Order = {
   customerName: string;
   businessName: string;
   customerPhone: string;
+  /** The buyer's customer type when they ordered (null on older orders). */
+  customerTypeName: string | null;
   paymentMethod: string;
   status: string;
   whatsappSentAt: string | null;
@@ -160,6 +162,11 @@ export default function AdminOrdersPage() {
                     <p className="text-[13px] text-[#6b6259]">{order.businessName}</p>
                   )}
                   <p className="text-[13px] text-[#6b6259]">{order.customerPhone}</p>
+                  {order.customerTypeName && (
+                    <p className="text-[13px] font-semibold text-[var(--secondary)]">
+                      {t("admin.orders.customerType", { type: order.customerTypeName })}
+                    </p>
+                  )}
                   <p className="text-[13px] text-[#6b6259]">
                     {paymentMethodLabels[order.paymentMethod] ?? order.paymentMethod}
                   </p>

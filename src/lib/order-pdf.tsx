@@ -32,6 +32,8 @@ export type OrderPdfData = {
   customerName: string;
   businessName: string;
   customerPhone: string;
+  /** The buyer's customer type (school, restaurant…) whose prices were charged. */
+  customerTypeName?: string | null;
   paymentMethod: PaymentMethod;
   items: OrderPdfItem[];
   subtotal: number;
@@ -170,6 +172,12 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
             <Text style={styles.infoValue}>{order.customerPhone}</Text>
             <Text style={styles.infoLabel}>מספר טלפון</Text>
           </View>
+          {order.customerTypeName ? (
+            <View style={styles.infoRow}>
+              <Text style={styles.infoValue}>{order.customerTypeName}</Text>
+              <Text style={styles.infoLabel}>סוג לקוח</Text>
+            </View>
+          ) : null}
           <View style={styles.infoRow}>
             <Text style={styles.infoValue}>{PAYMENT_METHOD_LABEL_HE[order.paymentMethod]}</Text>
             <Text style={styles.infoLabel}>אופן תשלום</Text>

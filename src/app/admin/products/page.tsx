@@ -16,6 +16,7 @@ import { Spinner, useToast } from "@/components/toast";
 import { optimizedImage } from "@/lib/image-url";
 import { LOW_STOCK_THRESHOLD, PRODUCT_UNIT, asProductUnit } from "@/lib/product-unit";
 import { DESKTOP_QUERY, useMediaQuery } from "@/lib/use-media-query";
+import { backdropCloseProps } from "@/lib/backdrop-close";
 
 type Category = {
   id: string;
@@ -922,7 +923,9 @@ export default function AdminProductsPage() {
               return (
                 <li
                   key={product.id}
-                  className="bg-white border border-[#eae5dc] rounded-[14px] overflow-hidden flex flex-col"
+                  // The whole card opens the edit window (the ⋯ menu stops the click).
+                  onClick={() => startEdit(product)}
+                  className="cursor-pointer bg-white border border-[#eae5dc] rounded-[14px] overflow-hidden flex flex-col transition-[border-color,box-shadow,transform] duration-200 ease-out hover:-translate-y-1 hover:border-[var(--accent)] hover:shadow-[0_10px_24px_-10px_rgba(26,23,20,0.25)] active:translate-y-0 active:scale-[0.99] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
                 >
                   <div className="relative h-44 bg-white flex items-center justify-center border-b border-[#f2efe9]">
                     {product.imageUrl ? (
@@ -935,7 +938,7 @@ export default function AdminProductsPage() {
                     ) : (
                       <PackageIcon className="w-10 h-10 text-[#c5bdb1]" />
                     )}
-                    <div className="absolute top-2.5 end-2.5">
+                    <div className="absolute top-2.5 end-2.5" onClick={(e) => e.stopPropagation()}>
                       <ActionsMenu
                         label={t("admin.products.actionsMenu", { name: product.name })}
                         disabled={busy?.id === product.id}
@@ -999,10 +1002,14 @@ export default function AdminProductsPage() {
                     </div>
                   </div>
 
+                  {/* Kept as a button for keyboard users; the card's own click handles the mouse. */}
                   <button
                     type="button"
-                    onClick={() => startEdit(product)}
-                    className="flex-1 flex flex-col gap-1.5 p-3.5 text-start"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startEdit(product);
+                    }}
+                    className="flex-1 flex flex-col gap-1.5 p-3.5 text-start outline-none focus-visible:bg-[#fbf8f3]"
                   >
                     <span className="text-[15px] font-semibold text-[#1a1714] leading-snug line-clamp-2">
                       {product.name}
@@ -1047,7 +1054,10 @@ export default function AdminProductsPage() {
       {editingProduct && (
         // Centered edit window; the page behind can't be tapped or scrolled.
         // !mt-0: the page's space-y gap would otherwise push the overlay down.
-        <div className="fixed inset-0 !mt-0 z-40 flex items-center justify-center p-4 bg-[#1a1714]/55">
+        <div
+          className="fixed inset-0 !mt-0 z-40 flex items-center justify-center p-4 bg-[#1a1714]/55"
+          {...backdropCloseProps(cancelEdit)}
+        >
           <div
             role="dialog"
             aria-modal="true"
