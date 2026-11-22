@@ -2,11 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { type Product } from "@/components/catalog-ui";
-import { getEffectivePrice } from "@/lib/effective-price";
 
 // "featured" keeps the order the products arrive in, which is the admin's
 // arrangement (Product.sortOrder) on category pages.
-export type SortMode = "featured" | "name-asc" | "name-desc" | "price-asc" | "price-desc";
+export type SortMode = "featured" | "name-asc" | "name-desc";
 
 function startsWithLatinOrDigit(name: string): boolean {
   return /^[A-Za-z0-9]/.test(name.trim());
@@ -25,11 +24,6 @@ function makeComparator(sortMode: SortMode): (a: Product, b: Product) => number 
       return () => 0;
     case "name-desc":
       return (a, b) => -compareProductNames(a, b);
-    // Guests have no prices (and no price sort); 0 keeps the order stable.
-    case "price-asc":
-      return (a, b) => (getEffectivePrice(a) ?? 0) - (getEffectivePrice(b) ?? 0);
-    case "price-desc":
-      return (a, b) => (getEffectivePrice(b) ?? 0) - (getEffectivePrice(a) ?? 0);
     case "name-asc":
     default:
       return compareProductNames;
@@ -38,48 +32,25 @@ function makeComparator(sortMode: SortMode): (a: Product, b: Product) => number 
 
 export function useProductFilters(products: Product[]) {
   const [sortMode, setSortMode] = useState<SortMode>("featured");
-  const [priceMin, setPriceMin] = useState("");
-  const [priceMax, setPriceMax] = useState("");
   const [inStockOnly, setInStockOnly] = useState(false);
 
-  const filtered = useMemo(() => {
-    const min = priceMin === "" ? null : Number(priceMin);
-    const max = priceMax === "" ? null : Number(priceMax);
-    return products.filter((product) => {
-      if (inStockOnly && !product.inStock) return false;
-      const effectivePrice = getEffectivePrice(product);
-      if (effectivePrice == null) return true; // a guest: no price filter
-      if (min !== null && !Number.isNaN(min) && effectivePrice < min) return false;
-      if (max !== null && !Number.isNaN(max) && effectivePrice > max) return false;
-      return true;
-    });
-  }, [products, priceMin, priceMax, inStockOnly]);
+  const filtered = useMemo(
+    () => (inStockOnly ? products.filter((product) => product.inStock) : products),
+    [products, inStockOnly]
+  );
 
   const sorted = useMemo(
     () => [...filtered].sort(makeComparator(sortMode)),
     [filtered, sortMode]
   );
 
-  const hasActiveFilter = priceMin !== "" || priceMax !== "" || inStockOnly;
-
-  function clearFilters() {
-    setPriceMin("");
-    setPriceMax("");
-    setInStockOnly(false);
-  }
 
   return {
     sortMode,
     setSortMode,
-    priceMin,
-    setPriceMin,
-    priceMax,
-    setPriceMax,
     inStockOnly,
     setInStockOnly,
     filtered,
     sorted,
-    hasActiveFilter,
-    clearFilters,
   };
 }

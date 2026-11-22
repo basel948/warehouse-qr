@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { WAREHOUSE_NAME } from "@/lib/branding";
 import { prisma } from "@/lib/prisma";
+import { sendEmail } from "@/lib/send-email";
 
 // Server-only: "forgot password" links for admins.
 
@@ -35,38 +36,18 @@ export function resetLink(token: string): string {
   return `${base}/admin/reset-password?token=${token}`;
 }
 
-/** Sends the reset link via SendGrid (same setup as the order emails). */
+/** Sends the reset link (same email setup as the order emails). */
 export async function sendPasswordResetEmail(to: string, username: string, link: string): Promise<void> {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const fromEmail = process.env.SENDGRID_FROM_EMAIL;
-  if (!apiKey || !fromEmail) {
-    throw new Error("Email is not configured: set SENDGRID_API_KEY and SENDGRID_FROM_EMAIL");
-  }
-
-  const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      personalizations: [{ to: [{ email: to }] }],
-      from: { email: fromEmail, name: WAREHOUSE_NAME },
-      subject: `איפוס סיסמה – ${WAREHOUSE_NAME}`,
-      content: [
-        {
-          type: "text/plain",
-          value: [
-            `התקבלה בקשה לאיפוס הסיסמה של המשתמש "${username}" בממשק הניהול.`,
-            "",
-            "לבחירת סיסמה חדשה, היכנסו לקישור (בתוקף ל-30 דקות, לשימוש חד-פעמי):",
-            link,
-            "",
-            "אם לא ביקשתם לאפס את הסיסמה, אפשר להתעלם מהמייל הזה – הסיסמה לא תשתנה.",
-          ].join("\n"),
-        },
-      ],
-    }),
+  await sendEmail({
+    to,
+    subject: `איפוס סיסמה – ${WAREHOUSE_NAME}`,
+    text: [
+      `התקבלה בקשה לאיפוס הסיסמה של המשתמש "${username}" בממשק הניהול.`,
+      "",
+      "לבחירת סיסמה חדשה, היכנסו לקישור (בתוקף ל-30 דקות, לשימוש חד-פעמי):",
+      link,
+      "",
+      "אם לא ביקשתם לאפס את הסיסמה, אפשר להתעלם מהמייל הזה – הסיסמה לא תשתנה.",
+    ].join("\n"),
   });
-
-  if (!res.ok) {
-    throw new Error(`SendGrid error ${res.status}: ${await res.text()}`);
-  }
 }

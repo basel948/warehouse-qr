@@ -142,6 +142,15 @@ model Order {
   vatPercent      Int?
   createdAt       DateTime    @default(now())
   items           OrderItem[]
+  // The buyer's ח.פ / עוסק מורשה number at order time (snapshot).
+  businessId       String    @default("")
+  // Buyers see no prices: an order arrives as a request (item prices null),
+  // the owner fills in the prices in the admin (pricedAt), then sends the
+  // buyer a WhatsApp link to the priced PDF (sentToBuyerAt). shareToken is
+  // the secret in that link (/q/<token>); set when the order is first priced.
+  pricedAt         DateTime?
+  sentToBuyerAt    DateTime?
+  shareToken       String?   @unique
   // The logged-in buyer who placed it, and their customer type's name at that
   // moment (a snapshot, like the prices). Null on orders from before buyer login.
   buyer            Buyer?   @relation(fields: [buyerId], references: [id], onDelete: SetNull)
@@ -156,7 +165,8 @@ model OrderItem {
   product   Product @relation(fields: [productId], references: [id])
   productId String
   quantity  Int
-  price     Float
+  // Before VAT. Null until the owner prices the order (buyers see no prices).
+  price     Float?
   // True while this line's quantity is taken off the product's stock, so a
   // cancelled order returns exactly what it took (and orders from before stock
   // tracking return nothing).
@@ -167,13 +177,12 @@ model OrderItem {
   discountPercent Int?
 }
 
-// A kind of buyer with its own price list: school, restaurant, warehouse…
-// Managed by the owner in /admin/customers; buyers pick one when logging in.
+// Customer types and their price lists. Not used by the app at the moment
+// (buyers see no prices; the owner prices each order by hand). The tables are
+// kept so the owner's data survives if price lists come back.
 model CustomerType {
   id        String             @id @default(cuid())
   name      String
-  // Emoji shown on the type's card in the shop's login window (e.g. 🍽️).
-  icon      String             @default("🏢")
   order     Int                @default(0)
   createdAt DateTime           @default(now())
   prices    ProductTypePrice[]
@@ -191,16 +200,19 @@ model ProductTypePrice {
   @@id([productId, customerTypeId])
 }
 
-// A buyer who logged in to see prices: identified by phone (normalised,
-// src/lib/phone.ts). The type is whatever they chose at login (there is no
-// verification yet). Name / business are remembered from their last order.
+// A buyer who signed up in the shop (first name, business name, ח.פ, phone).
+// Identified by phone (normalised, src/lib/phone.ts): signing up again with
+// the same phone updates the details. Checkout can update them too.
 model Buyer {
   id             String        @id @default(cuid())
   phone          String        @unique
   customerType   CustomerType? @relation(fields: [customerTypeId], references: [id], onDelete: SetNull)
   customerTypeId String?
+  // First name (שם פרטי).
   name           String        @default("")
   businessName   String        @default("")
+  // ח.פ / עוסק מורשה: digits only (src/lib/business-id.ts).
+  businessId     String        @default("")
   lastLoginAt    DateTime      @default(now())
   createdAt      DateTime      @default(now())
   orders         Order[]

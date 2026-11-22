@@ -2,7 +2,6 @@ import path from "node:path";
 import { Document, Font, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { WAREHOUSE_LOGO_URL, WAREHOUSE_NAME } from "@/lib/branding";
 import { withImageTransform } from "@/lib/image-url";
-import { PAYMENT_METHOD_LABEL_HE, type PaymentMethod } from "@/lib/payment-method";
 import { calculateOrderTotals } from "@/lib/order-totals";
 import { formatQuantityHe } from "@/lib/product-unit";
 
@@ -22,7 +21,8 @@ export type OrderPdfItem = {
   /** The coupon that discounted this line (orders with per-item coupons). */
   couponCode?: string | null;
   discountPercent?: number | null;
-  price: number;
+  /** Before VAT; null on an order the owner hasn't priced yet. */
+  price: number | null;
   imageUrl: string | null;
 };
 
@@ -31,12 +31,10 @@ export type OrderPdfData = {
   createdAt: Date;
   customerName: string;
   businessName: string;
+  /** ח.פ / עוסק מורשה ("" on orders from before it was asked). */
+  businessId: string;
   customerPhone: string;
-  /** The buyer's customer type (school, restaurant…) whose prices were charged. */
-  customerTypeName?: string | null;
-  paymentMethod: PaymentMethod;
   items: OrderPdfItem[];
-  subtotal: number;
   couponCode: string | null;
   discountPercent: number | null;
   /** VAT rate added on top (null = an order from before VAT was charged). */
@@ -91,6 +89,9 @@ const styles = StyleSheet.create({
   productThumb: { width: 20, height: 20, objectFit: "cover", borderRadius: 3 },
   productName: { fontSize: 9, flex: 1 },
   colQty: { width: "16%" },
+  // Unpriced request: product and quantity only.
+  colProductWide: { width: "75%" },
+  colQtyWide: { width: "25%" },
   colPrice: { width: "19%" },
   colTotal: { width: "19%" },
   totals: { marginTop: 14, alignItems: "flex-end" },
@@ -100,7 +101,6 @@ const styles = StyleSheet.create({
   grandTotalRow: { flexDirection: "row", gap: 10, marginTop: 4, paddingTop: 6, borderTop: "1pt solid #d8d0c3" },
   grandTotalLabel: { fontSize: 11, fontWeight: "bold" },
   grandTotalValue: { fontSize: 11, fontWeight: "bold" },
-  paidStamp: { fontSize: 9, fontWeight: "bold", color: "#2f6b3a", marginBottom: 3, textAlign: "right" },
   footer: { position: "absolute", bottom: 24, left: 32, right: 32, fontSize: 8, color: "#a39a8e", textAlign: "center" },
 });
 
@@ -108,28 +108,15 @@ function formatCurrency(amount: number): string {
   return `₪${amount.toFixed(2)}`;
 }
 
-type DocumentVariant = "order" | "receipt";
-
-const DOCUMENT_TITLE: Record<DocumentVariant, string> = {
-  order: "הזמנה חדשה",
-  receipt: "קבלה",
-};
-
-const DOCUMENT_NUMBER_LABEL: Record<DocumentVariant, string> = {
-  order: "מס' הזמנה",
-  receipt: "מס' קבלה",
-};
-
-const TOTAL_LABEL: Record<DocumentVariant, string> = {
-  order: "סה\"כ לתשלום",
-  receipt: "סה\"כ ששולם",
-};
-
-function OrderDocument({ order, variant }: { order: OrderPdfData; variant: DocumentVariant }) {
+// Two versions of one document: the request the owner receives when a buyer
+// orders (products and quantities, no prices), and the priced order the owner
+// sends back to the buyer once every line has a price.
+function OrderDocument({ order }: { order: OrderPdfData }) {
+  const priced = order.items.every((item) => item.price != null);
   // order.couponCode/discountPercent: the single order-wide coupon of orders
   // from before per-item coupons (newer orders pass discountPercent null).
   const totals = calculateOrderTotals(
-    order.items,
+    order.items.map((item) => ({ ...item, price: item.price ?? 0 })),
     { couponCode: order.couponCode, discountPercent: order.discountPercent },
     order.vatPercent
   );
@@ -139,11 +126,8 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <View>
-            {variant === "receipt" && <Text style={styles.paidStamp}>שולם ✓</Text>}
-            <Text style={styles.title}>{DOCUMENT_TITLE[variant]}</Text>
-            <Text style={styles.meta}>
-              {DOCUMENT_NUMBER_LABEL[variant]}: {order.orderId.slice(-6)}
-            </Text>
+            <Text style={styles.title}>{priced ? "הזמנה" : "הזמנה חדשה - ממתינה לתמחור"}</Text>
+            <Text style={styles.meta}>מס&apos; הזמנה: {order.orderId.slice(-6)}</Text>
             <Text style={styles.meta}>
               {order.createdAt.toLocaleDateString("he-IL")} {order.createdAt.toLocaleTimeString("he-IL")}
             </Text>
@@ -162,40 +146,40 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
           <Text style={styles.sectionTitle}>פרטי הקונה</Text>
           <View style={styles.infoRow}>
             <Text style={styles.infoValue}>{order.customerName}</Text>
-            <Text style={styles.infoLabel}>שם מלא</Text>
+            <Text style={styles.infoLabel}>שם</Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={styles.infoValue}>{order.businessName || "-"}</Text>
-            <Text style={styles.infoLabel}>מעסיק מורשה / שם העסק</Text>
+            <Text style={styles.infoLabel}>שם העסק</Text>
           </View>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoValue}>{order.customerPhone}</Text>
-            <Text style={styles.infoLabel}>מספר טלפון</Text>
-          </View>
-          {order.customerTypeName ? (
+          {order.businessId ? (
             <View style={styles.infoRow}>
-              <Text style={styles.infoValue}>{order.customerTypeName}</Text>
-              <Text style={styles.infoLabel}>סוג לקוח</Text>
+              <Text style={styles.infoValue}>{order.businessId}</Text>
+              <Text style={styles.infoLabel}>ח.פ / עוסק מורשה</Text>
             </View>
           ) : null}
           <View style={styles.infoRow}>
-            <Text style={styles.infoValue}>{PAYMENT_METHOD_LABEL_HE[order.paymentMethod]}</Text>
-            <Text style={styles.infoLabel}>אופן תשלום</Text>
+            <Text style={styles.infoValue}>{order.customerPhone}</Text>
+            <Text style={styles.infoLabel}>מספר טלפון</Text>
           </View>
         </View>
 
         <View style={styles.table}>
           <View style={styles.tableRow}>
-            <Text style={[styles.tableHeaderCell, styles.colProduct]}>מוצר</Text>
-            <Text style={[styles.tableHeaderCell, styles.colQty]}>כמות</Text>
-            <Text style={[styles.tableHeaderCell, styles.colPrice]}>
-              {totals.vatPercent ? "מחיר ליחידה (לפני מע\"מ)" : "מחיר ליחידה"}
-            </Text>
-            <Text style={[styles.tableHeaderCell, styles.colTotal]}>סה&quot;כ</Text>
+            <Text style={[styles.tableHeaderCell, priced ? styles.colProduct : styles.colProductWide]}>מוצר</Text>
+            <Text style={[styles.tableHeaderCell, priced ? styles.colQty : styles.colQtyWide]}>כמות</Text>
+            {priced && (
+              <>
+                <Text style={[styles.tableHeaderCell, styles.colPrice]}>
+                  {totals.vatPercent ? "מחיר ליחידה (לפני מע\"מ)" : "מחיר ליחידה"}
+                </Text>
+                <Text style={[styles.tableHeaderCell, styles.colTotal]}>סה&quot;כ</Text>
+              </>
+            )}
           </View>
           {order.items.map((item, index) => (
             <View style={styles.tableRow} key={index}>
-              <View style={[styles.tableCell, styles.colProduct, styles.productCell]}>
+              <View style={[styles.tableCell, priced ? styles.colProduct : styles.colProductWide, styles.productCell]}>
                 {item.imageUrl && (
                   <Image
                     src={withImageTransform(item.imageUrl, "w-100,h-100,f-png")}
@@ -211,15 +195,22 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
                   ) : null}
                 </View>
               </View>
-              <Text style={[styles.tableCell, styles.colQty]}>{formatQuantityHe(item.quantity, item.unit)}</Text>
-              <Text style={[styles.tableCell, styles.colPrice]}>{formatCurrency(item.price)}</Text>
-              <Text style={[styles.tableCell, styles.colTotal]}>
-                {formatCurrency(item.price * item.quantity)}
+              <Text style={[styles.tableCell, priced ? styles.colQty : styles.colQtyWide]}>
+                {formatQuantityHe(item.quantity, item.unit)}
               </Text>
+              {priced && (
+                <>
+                  <Text style={[styles.tableCell, styles.colPrice]}>{formatCurrency(item.price ?? 0)}</Text>
+                  <Text style={[styles.tableCell, styles.colTotal]}>
+                    {formatCurrency((item.price ?? 0) * item.quantity)}
+                  </Text>
+                </>
+              )}
             </View>
           ))}
         </View>
 
+        {priced && (
         <View style={styles.totals}>
           {totals.discounts.length > 0 && (
             <>
@@ -251,9 +242,10 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
           ) : null}
           <View style={styles.grandTotalRow}>
             <Text style={styles.grandTotalValue}>{formatCurrency(totals.total)}</Text>
-            <Text style={styles.grandTotalLabel}>{TOTAL_LABEL[variant]}</Text>
+            <Text style={styles.grandTotalLabel}>סה&quot;כ לתשלום</Text>
           </View>
         </View>
+        )}
 
         <Text style={styles.footer}>נוצר אוטומטית על ידי {WAREHOUSE_NAME}</Text>
       </Page>
@@ -262,15 +254,5 @@ function OrderDocument({ order, variant }: { order: OrderPdfData; variant: Docum
 }
 
 export async function generateOrderPdf(order: OrderPdfData): Promise<Buffer> {
-  return renderToBuffer(<OrderDocument order={order} variant="order" />);
-}
-
-/**
- * A separate "receipt" document (same layout, marked as paid) - only
- * meaningful for orders where payment was actually taken at order time
- * (currently: credit). Not a legally-numbered tax invoice/קבלה - just an
- * informal paid confirmation reusing the order's own reference number.
- */
-export async function generateOrderReceiptPdf(order: OrderPdfData): Promise<Buffer> {
-  return renderToBuffer(<OrderDocument order={order} variant="receipt" />);
+  return renderToBuffer(<OrderDocument order={order} />);
 }

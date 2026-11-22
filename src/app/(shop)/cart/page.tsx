@@ -7,22 +7,22 @@ import { useLocale } from "@/components/locale-provider";
 import { PageBackLink } from "@/components/page-back-link";
 import { useCart } from "@/components/storefront-shell";
 import { useBuyer } from "@/components/buyer-context";
-import { getEffectivePrice } from "@/lib/effective-price";
 import { optimizedImage } from "@/lib/image-url";
 import { asProductUnit } from "@/lib/product-unit";
 
 // The buyer's cart: review items, change amounts or remove them, then open
-// the payment window from the button at the bottom.
+// the send-order window from the button at the bottom. No prices: the owner
+// prices the order after it arrives.
 export default function CartPage() {
   const { t } = useLocale();
-  const { cart, setQuantity, allProducts, cartTotal, openCheckout } = useCart();
+  const { cart, setQuantity, allProducts, openCheckout } = useCart();
   const { buyer, openLogin } = useBuyer();
 
   const lines = (allProducts ?? [])
     .filter((product) => cart[product.id] > 0)
     .map((product) => ({ product, quantity: cart[product.id] }));
 
-  // Guests see no prices and can't order: ask them to log in first.
+  // Ordering needs the one-time sign-up.
   if (!buyer) {
     return (
       <div>
@@ -75,7 +75,6 @@ export default function CartPage() {
 
       <ul className="bg-white border border-[#eae5dc] rounded-[14px] divide-y divide-[#f0ece5]">
         {lines.map(({ product, quantity }) => {
-          const unitPrice = getEffectivePrice(product) ?? 0;
           return (
             <li key={product.id} className="flex gap-3 p-3">
               <div className="w-20 h-20 shrink-0 rounded-[10px] border border-[#f0ece5] bg-white flex items-center justify-center overflow-hidden">
@@ -96,10 +95,7 @@ export default function CartPage() {
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-[#1a1714] leading-snug line-clamp-2">{product.name}</p>
                     <p className="text-xs text-[#8a8177] mt-0.5">
-                      {t("cart.unitPrice", {
-                        price: unitPrice.toFixed(2),
-                        per: t(`catalog.perUnit.${asProductUnit(product.unit)}`),
-                      })}
+                      {t(`catalog.${quantity === 1 ? "unitName" : "unitMany"}.${asProductUnit(product.unit)}`)}
                     </p>
                   </div>
                   <button
@@ -111,28 +107,27 @@ export default function CartPage() {
                     <TrashIcon className="w-[18px] h-[18px]" />
                   </button>
                 </div>
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
                   <AddToCartControl
                     product={product}
                     quantity={quantity}
                     onAdd={() => setQuantity(product.id, 1)}
                     onSetQuantity={(next) => setQuantity(product.id, next)}
                   />
-                  <span className="text-sm font-bold text-[#1a1714]">₪{(unitPrice * quantity).toFixed(2)}</span>
                 </div>
               </div>
             </li>
           );
         })}
       </ul>
+      <p className="text-[13px] text-[#6b6259] text-center mt-3">{t("cart.pricesNote")}</p>
 
       {/* Fixed to the bottom of the screen, like the shop's floating cart bar. */}
       <div className="fixed bottom-0 inset-x-0 z-20 bg-white border-t border-[#eae5dc] px-4 py-3.5 shadow-[0_-8px_20px_-12px_rgba(0,0,0,0.25)]">
         <div className="max-w-2xl mx-auto flex items-center gap-4">
-          <div className="shrink-0">
-            <p className="text-xs text-[#8a8177]">{t("cart.subtotal")}</p>
-            <p className="text-lg font-bold text-[#1a1714]">₪{cartTotal.toFixed(2)}</p>
-          </div>
+          <p className="shrink-0 text-sm font-semibold text-[#4a443c]">
+            {lines.length === 1 ? t("catalog.cartItemsOne") : t("catalog.cartItemsOther", { count: lines.length })}
+          </p>
           <button
             type="button"
             onClick={openCheckout}

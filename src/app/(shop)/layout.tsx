@@ -1,16 +1,8 @@
 import { StorefrontShell } from "@/components/storefront-shell";
 import { getCurrentBuyer } from "@/lib/buyer-session";
-import { prisma } from "@/lib/prisma";
 
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
-  const [buyer, customerTypes] = await Promise.all([
-    getCurrentBuyer(),
-    // For the login window's "what kind of business" dropdown.
-    prisma.customerType.findMany({
-      orderBy: [{ order: "asc" }, { createdAt: "asc" }],
-      select: { id: true, name: true, icon: true },
-    }),
-  ]);
+  const buyer = await getCurrentBuyer();
   return (
     <StorefrontShell
       buyer={
@@ -18,10 +10,9 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
           phone: buyer.phone,
           name: buyer.name,
           businessName: buyer.businessName,
-          customerType: buyer.customerType,
+          businessId: buyer.businessId,
         }
       }
-      customerTypes={customerTypes}
     >
       {children}
     </StorefrontShell>

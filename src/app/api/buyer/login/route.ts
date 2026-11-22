@@ -1,22 +1,16 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { setBuyerCookie } from "@/lib/buyer-session";
-import { CHECKOUT_LIMITS } from "@/lib/checkout-limits";
-import { isValidIsraeliPhone, normalizeIsraeliPhone } from "@/lib/phone";
+import { buyerDetailsError, buyerDetailsSchema, normalizeBuyerDetails } from "@/lib/buyer-details";
 import { clientIp, recordHit, retryAfterSeconds } from "@/lib/rate-limit";
-
-const loginSchema = z.object({
-  phone: z.string().trim().max(CHECKOUT_LIMITS.phone),
-  customerTypeId: z.string().min(1).max(50),
-});
 
 const LOGIN_LIMIT = 20;
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 
-// Shop login: phone + the customer type the buyer chooses. There is no code
-// or verification yet (the owner's decision), so a buyer can pick any type;
-// the phone and chosen type are recorded so the owner can see who chose what.
+// Shop sign-up / sign-in: first name, business name, ח.פ and phone. No
+// password and no owner approval: the buyer is logged in straight away. The
+// phone is the identity, so signing up again with the same phone (a new phone,
+// or after logging out) updates that buyer's details instead of making a copy.
 export async function POST(request: Request) {
   const ipKey = `buyer-login:ip:${clientIp(request.headers)}`;
   const retryAfter = retryAfterSeconds(ipKey, LOGIN_LIMIT);
@@ -28,22 +22,19 @@ export async function POST(request: Request) {
   }
   recordHit(ipKey, LOGIN_WINDOW_MS);
 
-  const parsed = loginSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
-  const { phone, customerTypeId } = parsed.data;
+  const parsed = buyerDetailsSchema.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "missing_info" }, { status: 400 });
+  const problem = buyerDetailsError(parsed.data);
+  if (problem) return NextResponse.json({ error: problem }, { status: 400 });
 
-  if (!isValidIsraeliPhone(phone)) return NextResponse.json({ error: "invalid_phone" }, { status: 400 });
-  const type = await prisma.customerType.findUnique({ where: { id: customerTypeId }, select: { id: true } });
-  if (!type) return NextResponse.json({ error: "invalid_type" }, { status: 400 });
-
-  const normalized = normalizeIsraeliPhone(phone);
+  const { phone, ...details } = normalizeBuyerDetails(parsed.data);
   const buyer = await prisma.buyer.upsert({
-    where: { phone: normalized },
-    create: { phone: normalized, customerTypeId },
-    update: { customerTypeId, lastLoginAt: new Date() },
+    where: { phone },
+    create: { phone, ...details },
+    update: { ...details, lastLoginAt: new Date() },
   });
 
-  const response = NextResponse.json({ ok: true });
+  const response = NextResponse.json({ ok: true, name: buyer.name });
   setBuyerCookie(response, buyer.id);
   return response;
 }

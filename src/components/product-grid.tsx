@@ -12,15 +12,9 @@ export function ProductGrid({ products }: { products: Product[] }) {
   const {
     sortMode,
     setSortMode,
-    priceMin,
-    setPriceMin,
-    priceMax,
-    setPriceMax,
     inStockOnly,
     setInStockOnly,
     sorted,
-    hasActiveFilter,
-    clearFilters,
   } = useProductFilters(products);
 
   if (products.length === 0) {
@@ -32,14 +26,8 @@ export function ProductGrid({ products }: { products: Product[] }) {
       <ProductFilterBar
         sortMode={sortMode}
         setSortMode={setSortMode}
-        priceMin={priceMin}
-        setPriceMin={setPriceMin}
-        priceMax={priceMax}
-        setPriceMax={setPriceMax}
         inStockOnly={inStockOnly}
         setInStockOnly={setInStockOnly}
-        hasActiveFilter={hasActiveFilter}
-        clearFilters={clearFilters}
       />
       {sorted.length === 0 ? (
         <p className="text-sm text-[#8a8177] py-8 text-center">{t("catalog.noProductsMatchFilter")}</p>

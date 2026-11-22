@@ -2,7 +2,9 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { CHECKOUT_LIMITS } from "@/lib/checkout-limits";
-import { formatLocalPhone, isValidIsraeliPhone } from "@/lib/phone";
+import { buyerDetailsError, type BuyerDetailsError } from "@/lib/buyer-details";
+import { formatLocalPhone } from "@/lib/phone";
+import { asProductUnit } from "@/lib/product-unit";
 import { BuyerContext, type ShopBuyer } from "@/components/buyer-context";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -10,31 +12,22 @@ import { BackButton } from "@/components/back-button";
 import { BackToTop } from "@/components/back-to-top";
 import { BrandLogo } from "@/components/brand-logo";
 import {
-  CashIcon,
   CheckIcon,
-  ClockIcon,
-  CreditCardIcon,
+  HashIcon,
   PhoneIcon,
   LogOutIcon,
   StoreIcon,
   ChevronDownIcon,
   SearchIcon,
+  UserIcon,
 } from "@/components/icons";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useLocale } from "@/components/locale-provider";
 import { WAREHOUSE_CONTACT_PHONE, WAREHOUSE_NAME } from "@/lib/branding";
-import { PAYMENT_METHOD, type PaymentMethod } from "@/lib/payment-method";
 import { type Product, ProductDetailModal, ShopCard, groupIntoCards } from "@/components/catalog-ui";
-import { getEffectivePrice } from "@/lib/effective-price";
-import { VAT_PERCENT, bestCouponFor, calculateOrderTotals, type CouponRule } from "@/lib/order-totals";
 import { backdropCloseProps } from "@/lib/backdrop-close";
 
 const CART_STORAGE_KEY = "warehouse-cart";
-
-// 12345.5 -> "12,345.50": thousands separators keep big totals readable.
-function formatPrice(amount: number): string {
-  return amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 type CartContextValue = {
   cart: Record<string, number>;
@@ -43,8 +36,7 @@ type CartContextValue = {
   openProductDetail: (product: Product) => void;
   /** Every product (null until loaded), for showing cart items from any page. */
   allProducts: Product[] | null;
-  cartTotal: number;
-  /** Opens the payment (checkout) window. */
+  /** Opens the send-order (checkout) window. */
   openCheckout: () => void;
 };
 
@@ -70,12 +62,10 @@ function compareProductNames(a: Product, b: Product): number {
 export function StorefrontShell({
   children,
   buyer,
-  customerTypes,
 }: {
   children: React.ReactNode;
   /** The logged-in buyer (from the server), or null for a guest. */
   buyer: ShopBuyer | null;
-  customerTypes: { id: string; name: string; icon: string }[];
 }) {
   const { t } = useLocale();
   const pathname = usePathname();
@@ -139,20 +129,18 @@ export function StorefrontShell({
     return data;
   }
 
-  // Loaded once in the background on mount - the floating cart bar's total
-  // and the checkout sheet both need full product details (price, name...)
-  // for cart items regardless of which page's grid added them.
+  // Loaded once in the background on mount - the cart page and the checkout
+  // window need full product details (name, unit...) for cart items
+  // regardless of which page's grid added them.
   useEffect(() => {
     ensureAllProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // After logging in or out the prices change: re-render the server pages
-  // and reload the product list used by search, the cart and checkout.
+  // After logging in or out (or changing details at checkout): re-render the
+  // server layout, which reads the buyer from the cookie.
   async function afterLoginChange() {
     router.refresh();
-    const res = await fetch("/api/products");
-    setAllProducts(await res.json());
   }
 
   async function logout() {
@@ -192,10 +180,8 @@ export function StorefrontShell({
   }
 
   const cartCount = Object.values(cart).reduce((sum, qty) => sum + qty, 0);
-  const cartTotal = (allProducts ?? []).reduce(
-    (sum, product) => sum + (cart[product.id] ?? 0) * (getEffectivePrice(product) ?? 0),
-    0
-  );
+  // Distinct products in the cart (the floating bar's "3 items").
+  const cartLines = Object.values(cart).filter((qty) => qty > 0).length;
 
   const isSearching = searchQuery.trim().length > 0;
   const searchResults = useMemo(() => {
@@ -217,7 +203,6 @@ export function StorefrontShell({
     setQuantity,
     openProductDetail: setExpandedProduct,
     allProducts,
-    cartTotal,
     openCheckout,
   };
 
@@ -232,8 +217,7 @@ export function StorefrontShell({
                 <BrandLogo />
               </Link>
               <div className="flex items-center gap-3">
-                {/* Guests see no prices; logging in shows their type's prices. */}
-                {/* Logged in: "contact us" moves into the account menu. */}
+                {/* Guests get the sign-up button; logged in, "contact us" moves into the account menu. */}
                 {buyer ? (
                   <AccountMenu buyer={buyer} onContact={scrollToContact} onLogout={logout} />
                 ) : (
@@ -327,11 +311,12 @@ export function StorefrontShell({
           <div className="fixed bottom-0 inset-x-0 z-20 px-3.5 pt-4 pb-4 bg-gradient-to-t from-[#f7f5f1] from-[62%] to-transparent flex justify-center">
             <Link
               href="/cart"
-              // Sized by its content (at least 220px, at most the screen width)
-              // so both ₪9.90 and ₪12,345.00 fit on one line.
+              // Sized by its content (at least 220px, at most the screen width).
               className="min-w-[220px] max-w-full bg-[var(--accent)] text-white rounded-full px-6 py-3.5 flex items-center justify-between gap-6 font-bold text-base whitespace-nowrap shadow-[0_10px_20px_-8px_rgba(0,0,0,0.45)]"
             >
-              <span className="tabular-nums" dir="ltr">₪{formatPrice(cartTotal)}</span>
+              <span>
+                {cartLines === 1 ? t("catalog.cartItemsOne") : t("catalog.cartItemsOther", { count: cartLines })}
+              </span>
               <span className="flex items-center gap-2 shrink-0">
                 {t("catalog.viewCart")}
                 <svg
@@ -364,9 +349,9 @@ export function StorefrontShell({
               setCheckoutOpen(false);
               setLoginOpen(true);
             }}
+            onDetailsChanged={afterLoginChange}
             products={allProducts}
             cart={cart}
-            subtotal={cartTotal}
             onClose={() => setCheckoutOpen(false)}
             onOrdered={() => {
               setCart({});
@@ -395,15 +380,12 @@ export function StorefrontShell({
 
         {loginOpen && (
           <LoginDialog
-            customerTypes={customerTypes}
-            initialPhone={buyer ? formatLocalPhone(buyer.phone) : ""}
-            initialTypeId={buyer?.customerType.id ?? ""}
             onClose={() => setLoginOpen(false)}
             onLoggedIn={afterLoginChange}
           />
         )}
 
-        {/* Only for buyers: a guest can't see prices or order anyway. */}
+        {/* Only for buyers: a guest can't order anyway. */}
         {buyer && resumePromptOpen && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center sm:justify-center bg-[#1a1714]/55">
             <div className="w-full sm:max-w-sm bg-white rounded-t-[22px] sm:rounded-2xl p-[22px] text-center">
@@ -435,8 +417,8 @@ export function StorefrontShell({
   );
 }
 
-// Logged-in buyer: a pill with their name; tapping it
-// opens a small menu with their name, phone, contact us and log out.
+// Logged-in buyer: a pill with their first name; tapping it opens a small
+// menu with their name, business, phone, contact us and log out.
 function AccountMenu({
   buyer,
   onContact,
@@ -480,6 +462,7 @@ function AccountMenu({
   }, [open]);
 
   const displayName = buyer.name || buyer.businessName;
+  const subtitle = buyer.name && buyer.businessName ? buyer.businessName : null;
   const items = [
     { label: t("catalog.contactUs"), icon: PhoneIcon, onClick: onContact, danger: false },
     { label: t("buyer.logout"), icon: LogOutIcon, onClick: onLogout, danger: true },
@@ -497,7 +480,7 @@ function AccountMenu({
           open ? "bg-[var(--accent)] text-white" : "text-[var(--accent)]"
         }`}
       >
-        {/* Their name (remembered from their last order); before a first order: business or phone. */}
+        {/* Their first name (from sign-up); business or phone as a fallback. */}
         <span className="block max-w-[110px] truncate" dir={displayName ? undefined : "ltr"}>
           {displayName || formatLocalPhone(buyer.phone)}
         </span>
@@ -525,6 +508,7 @@ function AccountMenu({
             </span>
             <div className="min-w-0">
               {displayName && <p className="font-bold text-[15px] text-[#1a1714] truncate">{displayName}</p>}
+              {subtitle && <p className="text-[13px] text-[#6b6259] truncate">{subtitle}</p>}
               <p dir="ltr" className="text-[13px] text-[#8a8177] text-end">
                 {formatLocalPhone(buyer.phone)}
               </p>
@@ -565,34 +549,135 @@ function AccountMenu({
   );
 }
 
-// Shop login: phone + what kind of business (the customer type decides the
-// prices). No code or verification yet, by the owner's choice. The types are
-// big cards with the icon the owner picked in the admin.
+// Shop sign-up: first name, business name, ח.פ and phone, entered once. The
+// buyer is logged in straight away and stays logged in on this device until
+// they log out. The details are also kept on the device (LAST_LOGIN_KEY), so
+// after logging out the window comes back filled in.
 const WELCOME_MS = 1400;
+const LAST_LOGIN_KEY = "buyer-last-login";
+
+type DetailsForm = { name: string; businessName: string; businessId: string; phone: string };
+const EMPTY_DETAILS: DetailsForm = { name: "", businessName: "", businessId: "", phone: "" };
+
+function readLastLogin(): DetailsForm {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAST_LOGIN_KEY) ?? "null");
+    if (saved && typeof saved === "object") {
+      const text = (v: unknown) => (typeof v === "string" ? v : "");
+      return {
+        name: text(saved.name),
+        businessName: text(saved.businessName),
+        businessId: text(saved.businessId),
+        phone: text(saved.phone),
+      };
+    }
+  } catch {
+    // Private mode / blocked storage: just start empty.
+  }
+  return EMPTY_DETAILS;
+}
+
+function saveLastLogin(details: DetailsForm) {
+  try {
+    localStorage.setItem(
+      LAST_LOGIN_KEY,
+      JSON.stringify({
+        name: details.name.trim(),
+        businessName: details.businessName.trim(),
+        businessId: details.businessId.trim(),
+        phone: details.phone.trim(),
+      })
+    );
+  } catch {
+    // Storage blocked: they stay logged in by the cookie anyway.
+  }
+}
+
+/** The message for a buyerDetailsError() code (same codes from the APIs). */
+function detailsErrorMessage(t: ReturnType<typeof useLocale>["t"], code: BuyerDetailsError): string {
+  if (code === "invalid_business_id") return t("buyer.errorInvalidBusinessId");
+  if (code === "invalid_phone") return t("buyer.errorInvalidPhone");
+  return t("buyer.errorMissingInfo");
+}
+
+const DETAILS_INPUT_CLASS =
+  "w-full border-2 border-[color-mix(in_srgb,var(--accent)_55%,white)] rounded-xl ps-10 pe-3.5 py-3 bg-white placeholder:text-[#a39a8e] outline-none transition-[border-color,box-shadow] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_22%,transparent)]";
+
+// The four detail fields, shared by the sign-up window and checkout.
+function DetailsFields({
+  value,
+  onChange,
+  animate = false,
+}: {
+  value: DetailsForm;
+  onChange: (next: DetailsForm) => void;
+  animate?: boolean;
+}) {
+  const { t } = useLocale();
+  const fields: {
+    key: keyof DetailsForm;
+    icon: typeof UserIcon;
+    placeholder: string;
+    maxLength: number;
+    type: string;
+    inputMode?: "tel" | "numeric";
+    autoComplete: string;
+    ltr?: boolean;
+  }[] = [
+    { key: "name", icon: UserIcon, placeholder: t("buyer.firstNamePlaceholder"), maxLength: CHECKOUT_LIMITS.name, type: "text", autoComplete: "given-name" },
+    { key: "businessName", icon: StoreIcon, placeholder: t("buyer.businessPlaceholder"), maxLength: CHECKOUT_LIMITS.businessName, type: "text", autoComplete: "organization" },
+    { key: "businessId", icon: HashIcon, placeholder: t("buyer.businessIdPlaceholder"), maxLength: CHECKOUT_LIMITS.businessId, type: "text", inputMode: "numeric", autoComplete: "off" },
+    { key: "phone", icon: PhoneIcon, placeholder: t("buyer.phonePlaceholder"), maxLength: CHECKOUT_LIMITS.phone, type: "tel", inputMode: "tel", autoComplete: "tel" },
+  ];
+  return (
+    <div className="space-y-3">
+      {fields.map((field, i) => {
+        const Icon = field.icon;
+        return (
+          <div
+            key={field.key}
+            className={`relative ${animate ? "menu-item" : ""}`}
+            style={animate ? { animationDelay: `${100 + i * 50}ms` } : undefined}
+          >
+            <Icon className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--accent)]" />
+            <input
+              type={field.type}
+              inputMode={field.inputMode}
+              placeholder={field.placeholder}
+              aria-label={field.placeholder}
+              value={value[field.key]}
+              maxLength={field.maxLength}
+              autoComplete={field.autoComplete}
+              onChange={(e) => onChange({ ...value, [field.key]: e.target.value })}
+              className={DETAILS_INPUT_CLASS}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function LoginDialog({
-  customerTypes,
-  initialPhone,
-  initialTypeId,
   onClose,
   onLoggedIn,
 }: {
-  customerTypes: { id: string; name: string; icon: string }[];
-  initialPhone: string;
-  initialTypeId: string;
   onClose: () => void;
-  /** Reloads the prices; the window then shows a short welcome and closes itself. */
+  /** Refreshes the page as logged in; the window then shows a short welcome and closes itself. */
   onLoggedIn: () => Promise<void>;
 }) {
   const { t } = useLocale();
-  const [phone, setPhone] = useState(initialPhone);
-  const [typeId, setTypeId] = useState(initialTypeId);
+  const [details, setDetails] = useState<DetailsForm>(EMPTY_DETAILS);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [welcomeType, setWelcomeType] = useState<string | null>(null);
+  const [welcomeName, setWelcomeName] = useState<string | null>(null);
   // Plays the closing animation, then really closes.
   const [closing, setClosing] = useState(false);
   const requestClose = () => setClosing(true);
+
+  useEffect(() => {
+    setDetails(readLastLogin());
+  }, []);
 
   useEffect(() => {
     if (!closing) return;
@@ -602,23 +687,20 @@ function LoginDialog({
   }, [closing]);
 
   useEffect(() => {
-    if (!welcomeType) return;
+    if (welcomeName == null) return;
     const timer = setTimeout(requestClose, WELCOME_MS);
     return () => clearTimeout(timer);
     // Only when the welcome appears: onClose is a new function on every
-    // parent render (the price reload re-renders it), which would restart the timer.
+    // parent render (the refresh re-renders it), which would restart the timer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [welcomeType]);
+  }, [welcomeName]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!isValidIsraeliPhone(phone)) {
-      setError(t("checkout.errorInvalidPhone"));
-      return;
-    }
-    if (!typeId) {
-      setError(t("buyer.errorMissingType"));
+    const problem = buyerDetailsError(details);
+    if (problem) {
+      setError(detailsErrorMessage(t, problem));
       return;
     }
     setSubmitting(true);
@@ -626,16 +708,18 @@ function LoginDialog({
       const res = await fetch("/api/buyer/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, customerTypeId: typeId }),
+        body: JSON.stringify(details),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (data.error === "invalid_phone") setError(t("checkout.errorInvalidPhone"));
-        else if (data.error === "too_many_attempts") setError(t("buyer.errorTooMany"));
+        if (data.error === "too_many_attempts") setError(t("buyer.errorTooMany"));
+        else if (["missing_info", "invalid_business_id", "invalid_phone"].includes(data.error))
+          setError(detailsErrorMessage(t, data.error));
         else setError(t("buyer.errorFailed"));
         return;
       }
-      setWelcomeType(customerTypes.find((type) => type.id === typeId)?.name ?? "");
+      saveLastLogin(details);
+      setWelcomeName(typeof data.name === "string" ? data.name : details.name.trim());
       await onLoggedIn();
     } catch {
       setError(t("buyer.errorFailed"));
@@ -667,13 +751,13 @@ function LoginDialog({
           ×
         </button>
 
-        {welcomeType != null ? (
+        {welcomeName != null ? (
           <div className="py-6 text-center" role="status">
             <div className="tick-pop w-[52px] h-[52px] rounded-full bg-[#f1f7f1] text-[#2f6b3a] flex items-center justify-center mx-auto mb-3.5">
               <CheckIcon className="w-6 h-6" />
             </div>
             <p className="menu-item font-bold text-[17px] text-[#1a1714]" style={{ animationDelay: "150ms" }}>
-              {t("buyer.welcome", { type: welcomeType })}
+              {t("buyer.welcome", { name: welcomeName })}
             </p>
           </div>
         ) : (
@@ -681,64 +765,22 @@ function LoginDialog({
             <div className="flex justify-center mb-3 mt-1">
               <BrandLogo />
             </div>
-            <h2 className="text-[19px] font-bold text-[#1a1714] text-center mb-5">{t("buyer.loginTitle")}</h2>
+            <h2 className="text-[19px] font-bold text-[#1a1714] text-center mb-1">{t("buyer.loginTitle")}</h2>
+            <p className="text-[13px] text-[#6b6259] text-center mb-5">{t("buyer.loginHint")}</p>
 
-            {customerTypes.length === 0 ? (
-              <p className="text-sm text-[#b3402e] text-center">{t("buyer.noTypesYet")}</p>
-            ) : (
-              <>
-                <div className="relative mb-4">
-                  <PhoneIcon className="absolute start-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--accent)]" />
-                  <input
-                    type="tel"
-                    placeholder={t("checkout.phonePlaceholder")}
-                    value={phone}
-                    maxLength={CHECKOUT_LIMITS.phone}
-                    inputMode="tel"
-                    autoComplete="tel"
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="w-full border-2 border-[color-mix(in_srgb,var(--accent)_55%,white)] rounded-xl ps-10 pe-3.5 py-3 bg-white placeholder:text-[#a39a8e] outline-none transition-[border-color,box-shadow] focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_22%,transparent)]"
-                  />
-                </div>
+            <div className="mb-4">
+              <DetailsFields value={details} onChange={setDetails} animate />
+            </div>
 
-                <p className="text-[13px] font-semibold text-[#6b6259] mb-2">{t("buyer.typeLabel")}</p>
-                <div role="radiogroup" aria-label={t("buyer.typeLabel")} className="grid grid-cols-3 gap-2 mb-4">
-                  {customerTypes.map((type, i) => {
-                    const selected = type.id === typeId;
-                    return (
-                      <button
-                        key={type.id}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        onClick={() => setTypeId(type.id)}
-                        style={{ animationDelay: `${120 + i * 45}ms` }}
-                        className={`menu-item flex flex-col items-center justify-center gap-1 rounded-xl border-2 px-1.5 py-3 text-[12.5px] font-semibold leading-tight text-center transition-[color,background-color,border-color,transform] active:scale-95 ${
-                          selected
-                            ? "border-[var(--accent)] bg-[color-mix(in_srgb,var(--accent)_12%,white)] text-[#1a1714]"
-                            : "border-[color-mix(in_srgb,var(--accent)_55%,white)] bg-white text-[#4a443c] hover:border-[var(--accent)]"
-                        }`}
-                      >
-                        <span className="text-[26px] leading-none" aria-hidden>
-                          {type.icon}
-                        </span>
-                        {type.name}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full bg-[var(--accent)] text-white rounded-xl py-[14px] font-semibold text-base transition-transform active:scale-[0.98] disabled:opacity-50"
-                >
-                  {submitting ? t("buyer.loggingIn") : t("buyer.login")}
-                </button>
-                {error && <p className="text-sm text-[#b3402e] mt-2">{error}</p>}
-                <p className="text-xs text-[#8a8177] text-center mt-3">{t("buyer.rememberedNote")}</p>
-              </>
-            )}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full bg-[var(--accent)] text-white rounded-xl py-[14px] font-semibold text-base transition-transform active:scale-[0.98] disabled:opacity-50"
+            >
+              {submitting ? t("buyer.loggingIn") : t("buyer.submit")}
+            </button>
+            {error && <p className="text-sm text-[#b3402e] mt-2 text-center">{error}</p>}
+            <p className="text-xs text-[#8a8177] text-center mt-3">{t("buyer.rememberedNote")}</p>
           </>
         )}
       </form>
@@ -746,23 +788,23 @@ function LoginDialog({
   );
 }
 
-// categoryNames: for the tag and messages; empty = a whole-order coupon.
-type AppliedCoupon = CouponRule & { categoryNames: string[] };
-
+// Sending the order: the items and quantities, the buyer's saved details
+// (filled in, changeable), and a note that prices come back from the owner.
 function CheckoutSheet({
   buyer,
   onLoginNeeded,
+  onDetailsChanged,
   products,
   cart,
-  subtotal,
   onClose,
   onOrdered,
 }: {
   buyer: ShopBuyer;
   onLoginNeeded: () => void;
+  /** After an order that changed the buyer's details: refresh the page's copy. */
+  onDetailsChanged: () => void;
   products: Product[];
   cart: Record<string, number>;
-  subtotal: number;
   onClose: () => void;
   onOrdered: () => void;
 }) {
@@ -777,128 +819,30 @@ function CheckoutSheet({
     };
   }, []);
 
-  // Filled in from the login (phone) and the buyer's last order (name, business).
-  const [customerName, setCustomerName] = useState(buyer.name);
-  const [businessName, setBusinessName] = useState(buyer.businessName);
-  const [customerPhone, setCustomerPhone] = useState(formatLocalPhone(buyer.phone));
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
-  // Card payment isn't connected to a payment provider yet: tapping "credit"
-  // only shows a notice and never selects it (the orders API rejects it too).
-  const [creditNoticeShown, setCreditNoticeShown] = useState(false);
-  const [couponInput, setCouponInput] = useState("");
-  const [appliedCoupons, setAppliedCoupons] = useState<AppliedCoupon[]>([]);
-  const [couponError, setCouponError] = useState<string | null>(null);
-  const [validatingCoupon, setValidatingCoupon] = useState(false);
+  const savedDetails: DetailsForm = {
+    name: buyer.name,
+    businessName: buyer.businessName,
+    businessId: buyer.businessId,
+    phone: formatLocalPhone(buyer.phone),
+  };
+  const [details, setDetails] = useState<DetailsForm>(savedDetails);
+  // The saved details show as a summary; "change" opens the fields. A buyer
+  // whose saved details are incomplete gets the fields straight away.
+  const [editingDetails, setEditingDetails] = useState(buyerDetailsError(savedDetails) != null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{
-    emailError: string | null;
-    discountAmount: number;
-    couponCode: string | null;
-  } | null>(null);
+  const [success, setSuccess] = useState(false);
 
   const lines = products
     .filter((product) => cart[product.id] > 0)
     .map((product) => ({ product, quantity: cart[product.id] }));
 
-  // Each item gets the biggest applied coupon covering it (the orders API
-  // re-derives the same server-side). Prices are before VAT; the buyer pays
-  // the total including VAT.
-  function totalsWith(coupons: CouponRule[]) {
-    return calculateOrderTotals(
-      lines.map(({ product, quantity }) => {
-        const coupon = bestCouponFor(
-          product.categories.map((c) => c.id),
-          coupons
-        );
-        return {
-          price: getEffectivePrice(product) ?? 0,
-          quantity,
-          couponCode: coupon?.code,
-          discountPercent: coupon?.discountPercent,
-        };
-      }),
-      null,
-      VAT_PERCENT
-    );
-  }
-  const { discounts, totalBeforeVat, vatAmount, total } = totalsWith(appliedCoupons);
-
-  async function applyCoupon() {
-    setCouponError(null);
-    if (!couponInput.trim()) {
-      setCouponError(t("checkout.couponErrorEmpty"));
-      return;
-    }
-
-    if (appliedCoupons.some((c) => c.code === couponInput.trim().toUpperCase())) {
-      setCouponError(t("checkout.couponErrorDuplicate"));
-      return;
-    }
-
-    setValidatingCoupon(true);
-    try {
-      const res = await fetch("/api/coupons/validate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: couponInput.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setCouponError(t("checkout.couponErrorInvalid"));
-        return;
-      }
-      const coupon: AppliedCoupon = {
-        code: data.code,
-        discountPercent: data.discountPercent,
-        categoryIds: data.categoryIds ?? [],
-        categoryNames: data.categoryNames ?? [],
-      };
-      if (!totalsWith([coupon]).discounts.length) {
-        // A category coupon with none of its categories in the cart.
-        setCouponError(t("checkout.couponErrorNoItems", { categories: coupon.categoryNames.join(", ") }));
-        return;
-      }
-      if (!totalsWith([...appliedCoupons, coupon]).discounts.some((d) => d.code === coupon.code)) {
-        // Every item it covers already has an equal or bigger coupon.
-        setCouponError(t("checkout.couponErrorNoBetter"));
-        return;
-      }
-      setAppliedCoupons([...appliedCoupons, coupon]);
-      setCouponInput("");
-    } catch {
-      setCouponError(t("checkout.couponErrorNetwork"));
-    } finally {
-      setValidatingCoupon(false);
-    }
-  }
-
-  // Pay-later is only offered with a coupon applied, so drop it as the chosen
-  // method whenever the coupon goes away (removed, or replaced by an invalid one).
-  useEffect(() => {
-    if (appliedCoupons.length === 0 && paymentMethod === PAYMENT_METHOD.PAY_LATER) setPaymentMethod(null);
-  }, [appliedCoupons, paymentMethod]);
-
-  function removeCoupon(code: string) {
-    setAppliedCoupons(appliedCoupons.filter((c) => c.code !== code));
-    setCouponError(null);
-  }
-
   async function submitOrder() {
     setError(null);
-
-    if (!customerName.trim() || !businessName.trim() || !customerPhone.trim()) {
-      setError(t("checkout.errorMissingInfo"));
-      return;
-    }
-
-    if (!isValidIsraeliPhone(customerPhone)) {
-      setError(t("checkout.errorInvalidPhone"));
-      return;
-    }
-
-    if (!paymentMethod) {
-      setError(t("checkout.errorMissingPaymentMethod"));
+    const problem = buyerDetailsError(details);
+    if (problem) {
+      setEditingDetails(true);
+      setError(detailsErrorMessage(t, problem));
       return;
     }
 
@@ -908,26 +852,24 @@ function CheckoutSheet({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          customerName,
-          businessName,
-          customerPhone,
-          paymentMethod,
-          couponCodes: appliedCoupons.map((c) => c.code),
-          items: lines.map((line) => ({
-            productId: line.product.id,
-            quantity: line.quantity,
-          })),
+          details,
+          items: lines.map((line) => ({ productId: line.product.id, quantity: line.quantity })),
         }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (data.error === "login_required") {
           onLoginNeeded();
           return;
         }
-        if (data.error === "invalid_phone") setError(t("checkout.errorInvalidPhone"));
-        else if (data.error === "insufficient_stock")
+        if (["missing_info", "invalid_business_id", "invalid_phone"].includes(data.error)) {
+          setEditingDetails(true);
+          setError(detailsErrorMessage(t, data.error));
+        } else if (data.error === "phone_taken") {
+          setEditingDetails(true);
+          setError(t("checkout.errorPhoneTaken"));
+        } else if (data.error === "insufficient_stock")
           setError(
             t("checkout.errorInsufficientStock", {
               items: (data.items ?? [])
@@ -940,17 +882,13 @@ function CheckoutSheet({
         else if (data.error === "out_of_stock")
           setError(t("checkout.errorOutOfStock", { names: (data.names ?? []).join(", ") }));
         else if (data.error === "too_many_orders") setError(t("checkout.errorTooManyOrders"));
-        else if (data.error === "pay_later_requires_coupon") setError(t("checkout.errorPayLaterNeedsCoupon"));
-        else if (data.error === "credit_unavailable") setError(t("checkout.creditUnavailable"));
         else setError(t("checkout.errorFailed"));
         return;
       }
 
-      setSuccess({
-        emailError: data.emailError,
-        discountAmount: data.discountAmount ?? 0,
-        couponCode: data.order.couponCode,
-      });
+      saveLastLogin(details);
+      if (editingDetails) onDetailsChanged();
+      setSuccess(true);
     } catch {
       setError(t("checkout.errorNetwork"));
     } finally {
@@ -983,20 +921,10 @@ function CheckoutSheet({
               <CheckIcon className="w-6 h-6" />
             </div>
             <p className="font-bold text-[18px] text-[#1a1714] mb-2">{t("checkout.successTitle")}</p>
-            <p className="text-sm text-[#6b6259] mb-1.5">
-              {success.emailError ? t("checkout.emailPending") : t("checkout.emailSent")}
-            </p>
-            {success.couponCode && (
-              <p className="text-[13px] font-semibold text-[#2f6b3a] mb-2">
-                {t("checkout.successCouponSaved", {
-                  code: success.couponCode,
-                  amount: success.discountAmount.toFixed(2),
-                })}
-              </p>
-            )}
+            <p className="text-sm text-[#6b6259]">{t("checkout.successBody")}</p>
             <button
               onClick={onOrdered}
-              className="w-full bg-[#1a1714] text-white rounded-xl py-[15px] font-semibold text-base mt-4"
+              className="w-full bg-[#1a1714] text-white rounded-xl py-[15px] font-semibold text-base mt-6"
             >
               {t("checkout.done")}
             </button>
@@ -1014,156 +942,55 @@ function CheckoutSheet({
               </button>
             </div>
 
-            <div className="mb-4">
-              {appliedCoupons.length > 0 && (
-                <div className="flex flex-col gap-1.5 mb-2">
-                  {appliedCoupons.map((coupon) => (
-                    <div
-                      key={coupon.code}
-                      className="flex items-center justify-between gap-2 bg-[#f1f7f1] border border-[#cfe3cf] rounded-xl px-3.5 py-[9px]"
-                    >
-                      <span className="text-sm font-semibold text-[#2f6b3a] min-w-0">
-                        {t("checkout.couponApplied", { code: coupon.code, percent: coupon.discountPercent })}
-                        <span className="block text-xs font-medium text-[#4f7d57]">
-                          {coupon.categoryNames.length > 0
-                            ? t("checkout.couponOnlyFor", { categories: coupon.categoryNames.join(", ") })
-                            : t("checkout.couponWholeOrder")}
-                        </span>
-                      </span>
-                      <button
-                        onClick={() => removeCoupon(coupon.code)}
-                        aria-label={t("checkout.remove")}
-                        className="w-7 h-7 shrink-0 rounded-full text-[#2f6b3a] hover:bg-[#e2efe2] flex items-center justify-center text-base"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder={
-                      appliedCoupons.length > 0 ? t("checkout.couponPlaceholderAnother") : t("checkout.couponPlaceholder")
-                    }
-                    value={couponInput}
-                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
-                    className="flex-1 min-w-0 border border-[#e6e0d6] rounded-xl px-3.5 py-[11px] bg-[#f7f5f1] uppercase placeholder:normal-case placeholder:text-[#a39a8e]"
-                  />
-                  <button
-                    onClick={applyCoupon}
-                    disabled={validatingCoupon}
-                    className="shrink-0 border border-[#1a1714] text-[#1a1714] rounded-xl px-[18px] py-[11px] text-sm font-semibold disabled:opacity-50"
-                  >
-                    {validatingCoupon ? t("checkout.checking") : t("checkout.apply")}
-                  </button>
-                </div>
-              {couponError && <p className="text-[13px] text-[#b3402e] mt-1">{couponError}</p>}
-            </div>
+            <p className="text-[13px] font-semibold text-[#6b6259] mb-2">{t("checkout.itemsTitle")}</p>
+            <ul className="mb-4 bg-[#faf8f5] rounded-xl px-3.5 py-2.5 divide-y divide-[#f0ece5] text-sm max-h-48 overflow-y-auto">
+              {lines.map(({ product, quantity }) => (
+                <li key={product.id} className="flex items-center justify-between gap-3 py-1.5">
+                  <span className="min-w-0 text-[#1a1714] line-clamp-1">{product.name}</span>
+                  <span className="shrink-0 font-semibold text-[#4a443c]">
+                    {quantity} {t(`catalog.${quantity === 1 ? "unitName" : "unitMany"}.${asProductUnit(product.unit)}`)}
+                  </span>
+                </li>
+              ))}
+            </ul>
 
-            <div className="mb-4 space-y-[7px] text-sm">
-              {discounts.length > 0 && (
-                <>
-                  <div className="flex items-center justify-between text-[#6b6259]">
-                    <span>{t("checkout.subtotal")}</span>
-                    <span>₪{subtotal.toFixed(2)}</span>
-                  </div>
-                  {discounts.map((discount) => (
-                    <div key={discount.code} className="flex items-center justify-between text-[#2f6b3a]">
-                      <span>{t("checkout.couponDiscount", { code: discount.code, percent: discount.percent })}</span>
-                      <span>-₪{discount.amount.toFixed(2)}</span>
-                    </div>
-                  ))}
-                </>
-              )}
-              <div className="flex items-center justify-between text-[#6b6259]">
-                <span>{t("checkout.totalBeforeVat")}</span>
-                <span>₪{totalBeforeVat.toFixed(2)}</span>
-              </div>
-              <div className="flex items-center justify-between text-[#6b6259]">
-                <span>{t("checkout.vat", { percent: VAT_PERCENT })}</span>
-                <span>₪{vatAmount.toFixed(2)}</span>
-              </div>
-              <div className="flex items-center justify-between text-[17px] font-bold text-[#1a1714] pt-[7px] border-t border-[#f0ece5]">
-                <span>{t("checkout.totalToPay")}</span>
-                <span>₪{total.toFixed(2)}</span>
-              </div>
-            </div>
-
-            <div className="space-y-2.5 mb-4">
-              <input
-                type="text"
-                placeholder={t("checkout.namePlaceholder")}
-                value={customerName}
-                maxLength={CHECKOUT_LIMITS.name}
-                onChange={(e) => setCustomerName(e.target.value)}
-                className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[13px] bg-[#f7f5f1] placeholder:text-[#a39a8e]"
-              />
-              <input
-                type="text"
-                placeholder={t("checkout.businessNamePlaceholder")}
-                value={businessName}
-                maxLength={CHECKOUT_LIMITS.businessName}
-                onChange={(e) => setBusinessName(e.target.value)}
-                className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[13px] bg-[#f7f5f1] placeholder:text-[#a39a8e]"
-              />
-              <input
-                type="tel"
-                placeholder={t("checkout.phonePlaceholder")}
-                value={customerPhone}
-                maxLength={CHECKOUT_LIMITS.phone}
-                inputMode="tel"
-                autoComplete="tel"
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                className="w-full border border-[#e6e0d6] rounded-xl px-3.5 py-[13px] bg-[#f7f5f1] placeholder:text-[#a39a8e]"
-              />
-            </div>
-
-            <div className="mb-4">
-              <p className="text-[13px] font-semibold text-[#6b6259] mb-2">
-                {t("checkout.paymentMethodLabel")}
-              </p>
-              <div className={`grid gap-2 ${appliedCoupons.length > 0 ? "grid-cols-3" : "grid-cols-2"}`}>
-                <PaymentMethodButton
-                  active={paymentMethod === PAYMENT_METHOD.CASH}
-                  icon={<CashIcon className="w-5 h-5" />}
-                  label={t("checkout.paymentCash")}
-                  onClick={() => {
-                    setPaymentMethod(PAYMENT_METHOD.CASH);
-                    setCreditNoticeShown(false);
-                  }}
-                />
-                <PaymentMethodButton
-                  active={false}
-                  icon={<CreditCardIcon className="w-5 h-5" />}
-                  label={t("checkout.paymentCredit")}
-                  onClick={() => setCreditNoticeShown(true)}
-                />
-                {appliedCoupons.length > 0 && (
-                  <PaymentMethodButton
-                    active={paymentMethod === PAYMENT_METHOD.PAY_LATER}
-                    icon={<ClockIcon className="w-5 h-5" />}
-                    label={t("checkout.paymentPayLater")}
-                    onClick={() => {
-                      setPaymentMethod(PAYMENT_METHOD.PAY_LATER);
-                      setCreditNoticeShown(false);
-                    }}
-                  />
-                )}
-              </div>
-
-              {creditNoticeShown && (
-                <div className="mt-3 flex items-start gap-2.5 border border-[#e6e0d6] rounded-xl p-3.5 bg-[#f7f5f1] text-[#6b6259]">
-                  <CreditCardIcon className="w-4 h-4 mt-0.5 shrink-0" />
-                  <p className="text-[13px] leading-relaxed">{t("checkout.creditUnavailable")}</p>
-                </div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[13px] font-semibold text-[#6b6259]">{t("checkout.detailsTitle")}</p>
+              {!editingDetails && (
+                <button
+                  type="button"
+                  onClick={() => setEditingDetails(true)}
+                  className="text-[13px] font-semibold text-[var(--accent)]"
+                >
+                  {t("checkout.editDetails")}
+                </button>
               )}
             </div>
+            {editingDetails ? (
+              <div className="mb-4">
+                <DetailsFields value={details} onChange={setDetails} />
+              </div>
+            ) : (
+              <div className="mb-4 border border-[#e6e0d6] rounded-xl px-3.5 py-3 text-sm space-y-0.5">
+                <p className="font-semibold text-[#1a1714]">
+                  {details.name} · {details.businessName}
+                </p>
+                <p className="text-[#6b6259]">
+                  {t("buyer.businessIdPlaceholder")}: <span dir="ltr">{details.businessId}</span>
+                </p>
+                <p className="text-[#6b6259]" dir="ltr" style={{ textAlign: "end" }}>
+                  {details.phone}
+                </p>
+              </div>
+            )}
+
+            <p className="text-[13px] text-[#6b6259] bg-[#fdf6e8] border border-[#f0dfba] rounded-xl px-3.5 py-2.5 mb-4">
+              {t("checkout.pricesNote")}
+            </p>
 
             <button
               onClick={submitOrder}
-              disabled={submitting}
+              disabled={submitting || lines.length === 0}
               className="w-full bg-[var(--accent)] text-white rounded-xl py-[15px] font-semibold text-base disabled:opacity-50"
             >
               {submitting ? t("checkout.placingOrder") : t("checkout.placeOrder")}
@@ -1173,30 +1000,5 @@ function CheckoutSheet({
         )}
       </div>
     </div>
-  );
-}
-
-function PaymentMethodButton({
-  active,
-  icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border py-2.5 px-1.5 text-[11.5px] font-semibold leading-tight text-center text-[#4a443c] transition-colors ${
-        active ? "border-[var(--secondary)]" : "border-[#e6e0d6]"
-      }`}
-    >
-      {icon}
-      {label}
-    </button>
   );
 }

@@ -8,11 +8,13 @@ For *what* the product is and *why* it behaves the way it does (features, rules,
 
 **Royal Stock** (royalstockonline.com): a Next.js 14 (App Router) wholesale ordering site for a
 cleaning-supplies / disposables warehouse in Israel. A buyer scans a QR code (or opens the site),
-browses categories, logs in with phone + customer type (school, restaurant…) to see prices (guests
-see none), fills a cart and submits an order with name + business name + phone. There are no buyer
-passwords. The order is saved, a PDF is generated and emailed to the owner (SendGrid). The
-owner manages everything in `/admin` (products, categories, coupons, orders, pay-later debts).
-The UI is Hebrew and Arabic, both right-to-left.
+browses categories, signs up once (first name, business name, ח.פ / עוסק מורשה, phone; no password)
+and stays logged in on that device. **Buyers never see prices.** They fill a cart and send an order
+request (products + quantities). It is saved unpriced, a PDF is generated and emailed to the owner
+(Brevo). The owner prices the order in `/admin/orders` and sends it back to the buyer over WhatsApp
+(a wa.me link with a message and a link to the priced PDF). The owner manages everything in `/admin`
+(products, categories, orders, customers, coupons, pay-later debts). The UI is Hebrew and Arabic,
+both right-to-left.
 
 ## Commands
 
@@ -43,12 +45,14 @@ The UI is Hebrew and Arabic, both right-to-left.
   via presets). Uploads are shrunk in the browser first (`src/lib/shrink-image.ts`, 1600px) and
   capped at 1600px by ImageKit. `scripts/` holds one-off migration/import scripts (SQLite→Postgres,
   Cloudinary→ImageKit, product import, background removal) — history, not part of the app.
-- **Email**: SendGrid HTTPS API (`src/lib/order-email.ts`, `src/lib/password-reset.ts`). Raw SMTP
-  is blocked on Railway. Don't change `SENDGRID_FROM_EMAIL` without verifying the new sender in
-  SendGrid first.
-- **WhatsApp**: code exists (`src/lib/whatsapp.ts`) but sending is switched off
-  (`ORDER_WHATSAPP_NOTIFICATIONS_ENABLED = false` in `src/app/api/orders/route.ts`) until the
-  owner's WhatsApp Business setup is done. Orders go out by email only.
+- **Email**: Brevo HTTPS API (`src/lib/send-email.ts`, used by `order-email.ts` and
+  `password-reset.ts`; env `BREVO_API_KEY`, `BREVO_FROM_EMAIL`). Raw SMTP is blocked on Railway.
+  The Brevo account is the developer's (shared with another site, free plan: 300 emails/day for
+  both); `royalstockonline.com` is authenticated there. Don't change `BREVO_FROM_EMAIL` without
+  adding it as a sender in Brevo first. (SendGrid was used until its credits ran out in Oct 2026.)
+- **WhatsApp**: nothing is sent automatically. Priced orders reach the buyer through a `wa.me`
+  link the owner taps in the admin (his own WhatsApp opens with the message filled in).
+  `src/lib/whatsapp.ts` (Cloud API sending) is unused, kept for if WhatsApp Business is set up.
 
 See `.env.example` for every variable.
 
@@ -64,45 +68,44 @@ See `.env.example` for every variable.
 - `VariantGroup`: one shop card holding several products as options.
 - `Coupon`: `code` (stored uppercased), `discountPercent`, `active`, and `categories` (empty =
   whole order).
-- `Order` + `OrderItem`: everything about the money is a **snapshot** taken at order time —
-  item `price`, item `couponCode`/`discountPercent`, order `vatPercent`. Never recompute an old
-  order from current products/coupons. Older orders have an order-level `discountPercent` and/or
-  null `vatPercent`; `calculateOrderTotals` handles both shapes.
+- `Order` + `OrderItem`: an order arrives as a request: `OrderItem.price` is **null** until the
+  owner prices it (`Order.pricedAt`, `vatPercent` snapshotted then; `shareToken` = the secret in the
+  buyer's PDF link `/q/<token>`; `sentToBuyerAt` = he tapped "send on WhatsApp"; re-pricing clears
+  it). Prices are snapshots: never recompute an order from current products. Orders from before
+  this flow were priced at checkout (the migration set their `pricedAt`); older ones have an
+  order-level `discountPercent`, per-item coupons and/or null `vatPercent`; `calculateOrderTotals`
+  handles all shapes. `Order.businessId` snapshots the buyer's ח.פ.
 - `Order.status` and `Order.paymentMethod` are plain strings constrained by
   `src/lib/order-status.ts` and `src/lib/payment-method.ts` — use those constants.
 - `OrderItem.stockDeducted` records whether that line took stock, so cancelling returns exactly
   what was taken.
-- `CustomerType` (school, restaurant…, owner-managed; `icon` = an emoji shown on its card in the shop login) → `ProductTypePrice` (one product's price for
-  one type; no row = the product's base `price`). `Buyer`: normalised phone (unique) + the type they
-  chose at login; name/business remembered from their last order. `Order.buyerId` +
-  `Order.customerTypeName` (snapshot).
+- `Buyer`: normalised phone (unique, their identity) + first name (`name`) + `businessName` +
+  `businessId` (ח.פ / עוסק מורשה, digits only, `src/lib/business-id.ts`). `Order.buyerId`.
+- `CustomerType` / `ProductTypePrice` (price lists per customer type) and `Buyer.customerTypeId`
+  are **unused for now** (owner: "currently remove all prices"); the tables are kept so his data
+  survives if price lists come back. No code reads them.
 - `Admin` + `PasswordResetToken` (hashed, 30-minute, single-use) for the owner's login.
 
 ### Money: `src/lib/order-totals.ts` is the single source of truth
 
-`calculateOrderTotals(lines, orderCoupon, vatPercent)` is used by the checkout window, the orders
-API, the PDF, the email, the admin orders page and the pay-later page — never compute totals
-elsewhere. `VAT_PERCENT = 18`. `bestCouponFor()` picks, per product, the biggest applied coupon
-that covers it (whole-order coupons cover everything; category coupons cover products in any of
-their categories). Coupons never stack on one item. The orders API re-derives every discount
-server-side from the DB; the client's preview is never trusted.
+`calculateOrderTotals(lines, orderCoupon, vatPercent)` is used by the admin orders page (including
+the live preview while pricing), the PDF and the pay-later page — never compute totals elsewhere.
+`VAT_PERCENT = 18`, added on top of the owner's before-VAT prices. Coupons are no longer applied
+at checkout (`bestCouponFor` is unused by the shop); old orders keep their coupon snapshots.
 
-### Buyer login and prices per customer type
+### Buyer sign-up (no prices)
 
-Guests see **no prices**. A buyer logs in with phone + a customer type from a dropdown
-(`POST /api/buyer/login`); there is no code/verification yet (owner's choice), so anyone can pick
-any type. The cookie (`src/lib/buyer-session.ts`) holds only the buyer id, HMAC-signed with
-`NEXTAUTH_SECRET`; `getCurrentBuyer()` reads the type from the DB. Shop product queries use
-`shopProductInclude(typeId)` and `toPublicProduct(product, typeId)` (`src/lib/public-product.ts`):
-guests get `price`/`salePrice` = null, a buyer gets only their type's prices via `priceForType()`
-(`src/lib/customer-price.ts`; a sale is the same % off for every type). The orders API requires a
-buyer (`login_required`) and charges `priceForType`. Client: `useBuyer()`
-(`src/components/buyer-context.tsx`) gives `buyer` + `openLogin`; when `price` is null the
-catalog shows no price and the cart button opens the login window (the header has a small
-"כניסה" button next to "צור קשר"). Admin: one menu entry, "לקוחות ומחירים", with two tabs
-(route group `src/app/admin/(customers)/`, shared `layout.tsx`): `/admin/customers` (types; buyers —
-the owner can add one by hand or change a buyer's type, but the type a buyer picks at login replaces
-it) and `/admin/prices` (pick a type, type each product's price; empty = base price).
+Guests can browse; adding to the cart opens the sign-up window (header button "כניסה" too).
+`POST /api/buyer/login` takes `{name, businessName, businessId, phone}` (validated by
+`src/lib/buyer-details.ts`, shared with checkout), **upserts the buyer by phone** and logs them in:
+no password, no owner approval. The cookie (`src/lib/buyer-session.ts`) holds only the buyer id,
+HMAC-signed with `NEXTAUTH_SECRET`, for 400 days (the browser maximum); logging out clears it. The
+details are also kept in localStorage (`buyer-last-login`) to refill the window after a logout.
+Checkout shows the saved details (from the server) with a "change" button; `POST /api/orders` saves
+changes to the buyer (a phone that belongs to another buyer → `phone_taken`). Anyone who types a
+buyer's phone can overwrite their details — accepted trade-off of a password-less sign-up.
+Client: `useBuyer()` (`src/components/buyer-context.tsx`) gives `buyer` + `openLogin`. Admin:
+`/admin/customers` lists buyers (edit name/business/ח.פ, delete; phone is not editable).
 
 ### Stock: `src/lib/stock.ts`
 
@@ -112,7 +115,7 @@ is available. Reaching 0 sets `inStock = false`. `PATCH /api/orders/[id]` to CAN
 `restoreOrderStock`; reopening calls `redeductOrderStock` (floors at 0). Untracked products
 (`stockQuantity` null) are never touched.
 
-**Buyers never receive `stockQuantity`** (nor other types' prices): every product handed to the shop goes through
+**Buyers never receive prices or `stockQuantity`**: every product handed to the shop goes through
 `toPublicProduct()` (`src/lib/public-product.ts`) — server components and the public
 `GET /api/products` (the admin, with a session, gets the full object). Keep that when adding new
 product queries for the shop. Product queries use `PRODUCT_INCLUDE` from `src/lib/variant-groups.ts`.
@@ -133,23 +136,28 @@ dissolves cards left with one option. Keep it to one way per task — the owner 
 
 - `layout.tsx` wraps everything in `StorefrontShell` (`src/components/storefront-shell.tsx`):
   header + search, cart state (localStorage, with a "continue your order?" prompt), floating cart
-  bar, product detail modal, back-to-top, and the `CheckoutSheet` (coupons, VAT totals, buyer
-  details, payment method). `useCart()` exposes it to pages.
+  bar (item count), product detail modal, back-to-top, the sign-up window and the `CheckoutSheet`
+  (items + quantities, saved buyer details, "prices come back on WhatsApp" note). `useCart()`
+  exposes it to pages.
 - `page.tsx` (home): sale carousel + category tiles. `category/[categoryId]`: products grouped into
-  subcategory sections with a sticky chip bar and filters (`use-product-filters.ts`).
-  `cart/page.tsx`: the cart, then "continue to payment" opens the checkout window.
+  subcategory sections with a sticky chip bar and filters (`use-product-filters.ts`: in stock,
+  sort by name). `cart/page.tsx`: the cart, then "continue" opens the checkout window.
 - Server components read Prisma directly (no fetch round-trip) and pass `toPublicProduct` data to
   client components.
 
-### Orders (`POST /api/orders`, public)
+### Orders
 
-Validates (zod), rate-limits per IP and per phone (`src/lib/rate-limit.ts`, in-memory — fine for a
-single Railway instance), checks the Israeli phone (`src/lib/phone.ts`), re-derives coupons, rejects
-`CREDIT` (`credit_unavailable` — no payment provider yet) and `PAY_LATER` without a used coupon,
-then in one transaction deducts stock and creates the order with snapshots. Afterwards it builds
-the PDF (`src/lib/order-pdf.tsx`, react-pdf, Hebrew font) and emails it. **Notification failures
-never fail the order** — the order is always saved; `emailSentAt`/`whatsappSentAt` stay null and the
-error is returned so the admin can see it. Keep that non-blocking behaviour.
+- `POST /api/orders` (public, needs the buyer cookie: `login_required`): validates (zod + buyer
+  details), rate-limits per IP and per buyer (`src/lib/rate-limit.ts`, in-memory — fine for a single
+  Railway instance), checks stock, then in one transaction deducts stock, saves the buyer's details
+  and creates the order **without prices**. Afterwards it builds the request PDF
+  (`src/lib/order-pdf.tsx`, react-pdf, Hebrew font; no price columns while any line is unpriced) and
+  emails it to the owner. **Notification failures never fail the order** — the order is always
+  saved; `emailSentAt` stays null and the admin sees it. Keep that non-blocking behaviour.
+- `PATCH /api/orders/[id]` (admin) takes one of `{status}`, `{prices: [{itemId, price}]}` (every
+  line, before VAT; sets `pricedAt`, `vatPercent`, `shareToken`, clears `sentToBuyerAt`) or
+  `{markSent: true}`.
+- `GET /q/[token]` (public): the priced order PDF, the link the buyer gets on WhatsApp.
 
 ### Admin (`src/app/admin/`)
 
@@ -159,8 +167,10 @@ logout (removed at the owner's request); sessions last NextAuth's default 30 day
 code to `NEXT_PUBLIC_SITE_URL`, counts), products (categories with images and drag order;
 subcategories card = add/delete/drag subcategories, arrange products per subcategory, bulk
 stock/move/delete/merge/unmerge; product list with search, category filter, low-stock filter, edit
-modal), orders (status, cancelled-only delete, per-item coupons, VAT), coupons (scope: whole order or
-categories), pay-later (debts grouped by customer, mark paid). Admin pages are client components
+modal), orders ("to price" filter; price an order line by line with a live VAT total; send to the
+buyer on WhatsApp; view PDF; status; cancelled-only delete), customers (signed-up buyers), coupons
+and pay-later (both only matter for orders from before the no-prices flow: checkout no longer takes
+coupons or a payment method). Admin pages are client components
 calling the JSON API routes; destructive actions go through `useConfirm()`, feedback through
 `useToast()`. Mutating API routes check `getServerSession`.
 

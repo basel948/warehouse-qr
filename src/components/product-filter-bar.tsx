@@ -1,35 +1,20 @@
 "use client";
 
 import { useLocale } from "@/components/locale-provider";
-import { useBuyer } from "@/components/buyer-context";
 import { type SortMode } from "@/lib/use-product-filters";
 
 export function ProductFilterBar({
   sortMode,
   setSortMode,
-  priceMin,
-  setPriceMin,
-  priceMax,
-  setPriceMax,
   inStockOnly,
   setInStockOnly,
-  hasActiveFilter,
-  clearFilters,
 }: {
   sortMode: SortMode;
   setSortMode: (mode: SortMode) => void;
-  priceMin: string;
-  setPriceMin: (value: string) => void;
-  priceMax: string;
-  setPriceMax: (value: string) => void;
   inStockOnly: boolean;
   setInStockOnly: (value: boolean) => void;
-  hasActiveFilter: boolean;
-  clearFilters: () => void;
 }) {
   const { t } = useLocale();
-  // Guests see no prices, so there's nothing to filter or sort by price.
-  const showPrice = useBuyer().buyer != null;
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
@@ -42,37 +27,6 @@ export function ProductFilterBar({
         />
         {t("catalog.inStockOnlyFilter")}
       </label>
-      {showPrice && (
-      <div className="flex items-center gap-1.5">
-        <input
-          type="number"
-          inputMode="numeric"
-          value={priceMin}
-          onChange={(e) => setPriceMin(e.target.value)}
-          placeholder={t("catalog.priceMinPlaceholder")}
-          aria-label={t("catalog.priceMinPlaceholder")}
-          className="w-[70px] border border-[#e6e0d6] rounded-xl px-2 py-2 text-sm bg-white text-[#4a443c]"
-        />
-        <span className="text-[#8a8177]">–</span>
-        <input
-          type="number"
-          inputMode="numeric"
-          value={priceMax}
-          onChange={(e) => setPriceMax(e.target.value)}
-          placeholder={t("catalog.priceMaxPlaceholder")}
-          aria-label={t("catalog.priceMaxPlaceholder")}
-          className="w-[70px] border border-[#e6e0d6] rounded-xl px-2 py-2 text-sm bg-white text-[#4a443c]"
-        />
-        {hasActiveFilter && (
-          <button
-            onClick={clearFilters}
-            className="text-sm text-[var(--secondary)] font-semibold px-1"
-          >
-            {t("catalog.priceClear")}
-          </button>
-        )}
-      </div>
-      )}
       <select
         value={sortMode}
         onChange={(e) => setSortMode(e.target.value as SortMode)}
@@ -82,8 +36,6 @@ export function ProductFilterBar({
         <option value="featured">{t("catalog.sortFeatured")}</option>
         <option value="name-asc">{t("catalog.sortNameAsc")}</option>
         <option value="name-desc">{t("catalog.sortNameDesc")}</option>
-        {showPrice && <option value="price-asc">{t("catalog.sortPriceAsc")}</option>}
-        {showPrice && <option value="price-desc">{t("catalog.sortPriceDesc")}</option>}
       </select>
     </div>
   );

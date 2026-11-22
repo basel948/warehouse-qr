@@ -1,98 +1,41 @@
-import { WAREHOUSE_NAME } from "@/lib/branding";
-import { PAYMENT_METHOD_LABEL_HE, type PaymentMethod } from "@/lib/payment-method";
+import { sendEmail } from "@/lib/send-email";
 
 type OrderEmailMessage = {
   orderId: string;
   customerName: string;
   businessName: string;
+  businessId: string;
   customerPhone: string;
-  customerTypeName?: string | null;
-  paymentMethod: PaymentMethod;
-  totalBeforeVat: number;
-  vatPercent: number | null;
-  vatAmount: number;
-  total: number;
+  /** Number of order lines. */
+  itemCount: number;
+  /** The order request (products and quantities, no prices). */
   pdfBuffer: Buffer;
-  receiptPdfBuffer?: Buffer;
 };
 
-/**
- * Sends the order email via SendGrid's HTTPS API rather than raw SMTP.
- * Railway (and many hosts) block outbound SMTP ports as an anti-spam
- * measure, so a direct SMTP transport (e.g. Gmail) never reaches its
- * destination from there even with valid credentials - an HTTPS API call
- * isn't affected by that.
- */
+/** Emails the owner a new order request (to price in the admin), with the PDF attached. */
 export async function sendOrderEmail(order: OrderEmailMessage): Promise<void> {
-  const apiKey = process.env.SENDGRID_API_KEY;
-  const fromEmail = process.env.SENDGRID_FROM_EMAIL;
   const ownerEmail = process.env.WAREHOUSE_OWNER_EMAIL;
+  if (!ownerEmail) throw new Error("Email is not configured: set WAREHOUSE_OWNER_EMAIL");
 
-  if (!apiKey || !fromEmail || !ownerEmail) {
-    throw new Error(
-      "Email is not configured: set SENDGRID_API_KEY, SENDGRID_FROM_EMAIL and WAREHOUSE_OWNER_EMAIL"
-    );
-  }
+  const shortId = order.orderId.slice(-6);
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
 
-  const filename = `הזמנה-${order.orderId.slice(-6)}.pdf`;
-
-  const res = await fetch("https://api.sendgrid.com/v3/mail/send", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      personalizations: [{ to: [{ email: ownerEmail }] }],
-      from: { email: fromEmail, name: WAREHOUSE_NAME },
-      subject: `הזמנה חדשה מ-${order.customerName} · סה"כ ₪${order.total.toFixed(2)}`,
-      content: [
-        {
-          type: "text/plain",
-          value: [
-            `הזמנה חדשה #${order.orderId.slice(-6)}`,
-            `שם מלא: ${order.customerName}`,
-            `מעסיק מורשה / שם העסק: ${order.businessName || "-"}`,
-            `מספר טלפון: ${order.customerPhone}`,
-            ...(order.customerTypeName ? [`סוג לקוח: ${order.customerTypeName}`] : []),
-            `אופן תשלום: ${PAYMENT_METHOD_LABEL_HE[order.paymentMethod]}`,
-            ...(order.vatPercent
-              ? [
-                  `סה"כ לפני מע"מ: ₪${order.totalBeforeVat.toFixed(2)}`,
-                  `מע"מ ${order.vatPercent}%: ₪${order.vatAmount.toFixed(2)}`,
-                ]
-              : []),
-            `סה"כ לתשלום: ₪${order.total.toFixed(2)}`,
-            "",
-            order.receiptPdfBuffer
-              ? "פרטי ההזמנה והקבלה מצורפים כ-PDF."
-              : "פרטי ההזמנה המלאים מצורפים כ-PDF.",
-          ].join("\n"),
-        },
-      ],
-      attachments: [
-        {
-          content: order.pdfBuffer.toString("base64"),
-          filename,
-          type: "application/pdf",
-          disposition: "attachment",
-        },
-        ...(order.receiptPdfBuffer
-          ? [
-              {
-                content: order.receiptPdfBuffer.toString("base64"),
-                filename: `קבלה-${order.orderId.slice(-6)}.pdf`,
-                type: "application/pdf",
-                disposition: "attachment",
-              },
-            ]
-          : []),
-      ],
-    }),
+  await sendEmail({
+    to: ownerEmail,
+    subject: `הזמנה חדשה לתמחור מ-${order.businessName} (${order.customerName})`,
+    text: [
+      `הזמנה חדשה #${shortId} - ממתינה לתמחור`,
+      `שם פרטי: ${order.customerName}`,
+      `שם העסק: ${order.businessName}`,
+      `ח.פ / עוסק מורשה: ${order.businessId || "-"}`,
+      `טלפון: ${order.customerPhone}`,
+      `מספר מוצרים: ${order.itemCount}`,
+      "",
+      "רשימת המוצרים מצורפת כ-PDF.",
+      siteUrl
+        ? `למילוי המחירים ושליחה ללקוח: ${siteUrl}/admin/orders`
+        : "למילוי המחירים ושליחה ללקוח: עמוד ההזמנות בניהול.",
+    ].join("\n"),
+    attachments: [{ name: `הזמנה-${shortId}.pdf`, content: order.pdfBuffer }],
   });
-
-  if (!res.ok) {
-    const detail = await res.text();
-    throw new Error(`SendGrid API request failed (${res.status}): ${detail}`);
-  }
 }

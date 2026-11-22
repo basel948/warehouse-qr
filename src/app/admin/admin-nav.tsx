@@ -19,16 +19,13 @@ export function AdminNav() {
     { href: "/admin", label: t("nav.dashboard") },
     { href: "/admin/products", label: t("nav.products") },
     { href: "/admin/orders", label: t("nav.orders") },
-    // One entry for both tabs (customers + price lists).
-    { href: "/admin/customers", label: t("nav.customers"), also: "/admin/prices" },
+    { href: "/admin/customers", label: t("nav.customers") },
     { href: "/admin/coupons", label: t("nav.coupons") },
     { href: "/admin/pay-later", label: t("nav.payLater") },
   ];
 
-  const isActive = (item: { href: string; also?: string }) =>
-    item.href === "/admin"
-      ? pathname === "/admin"
-      : Boolean(pathname?.startsWith(item.href) || (item.also && pathname?.startsWith(item.also)));
+  const isActive = (item: { href: string }) =>
+    item.href === "/admin" ? pathname === "/admin" : Boolean(pathname?.startsWith(item.href));
   const activeItem = navItems.find(isActive);
 
   useEffect(() => {

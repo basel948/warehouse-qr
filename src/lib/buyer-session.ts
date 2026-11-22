@@ -1,6 +1,7 @@
-// Server-only: the shop buyer's login (phone + customer type). The cookie
-// holds only the buyer's id, signed with NEXTAUTH_SECRET, so it can't be
-// edited into another buyer; the type and its prices are always read from the
+// Server-only: the shop buyer's login. The buyer signs up once (first name,
+// business name, ח.פ, phone) and stays logged in on that device until they log
+// out. The cookie holds only the buyer's id, signed with NEXTAUTH_SECRET, so
+// it can't be edited into another buyer; the details are always read from the
 // database. Separate from the owner's admin login (NextAuth).
 import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
@@ -8,9 +9,9 @@ import type { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
 export const BUYER_COOKIE = "buyer_session";
-// Buyers stay logged in on a device for a long time; ordering shouldn't need
-// a login every visit.
-const MAX_AGE_SECONDS = 180 * 24 * 60 * 60;
+// "Log in once": the longest lifetime browsers allow for a cookie (about 400
+// days). Signing up again or checking out re-sets it (both upsert the buyer).
+const MAX_AGE_SECONDS = 400 * 24 * 60 * 60;
 
 function sign(value: string): string {
   const secret = process.env.NEXTAUTH_SECRET;
@@ -31,28 +32,22 @@ function verify(token: string): string | null {
 export type CurrentBuyer = {
   id: string;
   phone: string;
+  /** First name (שם פרטי). */
   name: string;
   businessName: string;
-  customerType: { id: string; name: string };
+  /** ח.פ / עוסק מורשה, digits only. */
+  businessId: string;
 };
 
-/** The logged-in buyer, or null (guest, bad cookie, or their type was deleted). */
+/** The logged-in buyer, or null (guest, bad cookie, or deleted by the owner). */
 export async function getCurrentBuyer(): Promise<CurrentBuyer | null> {
   const token = cookies().get(BUYER_COOKIE)?.value;
   const id = token ? verify(token) : null;
   if (!id) return null;
-  const buyer = await prisma.buyer.findUnique({
+  return prisma.buyer.findUnique({
     where: { id },
-    include: { customerType: { select: { id: true, name: true } } },
+    select: { id: true, phone: true, name: true, businessName: true, businessId: true },
   });
-  if (!buyer?.customerType) return null;
-  return {
-    id: buyer.id,
-    phone: buyer.phone,
-    name: buyer.name,
-    businessName: buyer.businessName,
-    customerType: buyer.customerType,
-  };
 }
 
 export function setBuyerCookie(response: NextResponse, buyerId: string): void {

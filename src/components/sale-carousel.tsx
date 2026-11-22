@@ -6,7 +6,6 @@ import { useLocale } from "@/components/locale-provider";
 import { useCart } from "@/components/storefront-shell";
 import { type Product } from "@/components/catalog-ui";
 import { optimizedImage } from "@/lib/image-url";
-import { getSalePercentOff } from "@/lib/effective-price";
 
 const AUTOPLAY_INTERVAL_MS = 4000;
 const RESUME_AFTER_INTERACTION_MS = 6000;
@@ -83,18 +82,12 @@ export function SaleCarousel({ products }: { products: Product[] }) {
           className="flex gap-0 sm:gap-3 overflow-x-auto snap-x snap-mandatory pb-1 -mx-4 sm:mx-0"
         >
           {products.map((product) => {
-            const percentOff = getSalePercentOff(product);
             return (
               <button
                 key={product.id}
                 onClick={() => openProductDetail(product)}
                 className="relative shrink-0 w-full sm:w-[55%] lg:w-[38%] snap-start snap-always text-start bg-white sm:border sm:border-[#eae5dc] sm:rounded-[16px] overflow-hidden sm:shadow-[0_2px_8px_-4px_rgba(0,0,0,0.15)]"
               >
-                {percentOff !== null && (
-                  <span className="absolute top-2.5 start-2.5 z-10 bg-[#b3402e] text-white text-xs font-bold rounded-full px-2.5 py-1">
-                    -{percentOff}%
-                  </span>
-                )}
                 <div className="aspect-[4/3] flex items-center justify-center bg-[#f2efe9] overflow-hidden">
                   {product.saleBannerImageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -116,15 +109,6 @@ export function SaleCarousel({ products }: { products: Product[] }) {
                 </div>
                 <div className="p-4 sm:p-3">
                   <p className="text-sm font-medium text-[#2b2620] line-clamp-1 mb-1">{product.name}</p>
-                  {/* Guests get no prices, so nothing is shown under the name. */}
-                  {product.price != null && product.salePrice != null && (
-                    <p className="text-base font-bold flex items-center gap-1.5">
-                      <span className="text-[#b3402e]">₪{product.salePrice.toFixed(2)}</span>
-                      <span className="text-[#a39a8e] font-medium line-through text-sm">
-                        ₪{product.price.toFixed(2)}
-                      </span>
-                    </p>
-                  )}
                 </div>
               </button>
             );

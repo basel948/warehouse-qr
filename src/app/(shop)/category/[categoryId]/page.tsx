@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { shopProductInclude, toPublicProduct } from "@/lib/public-product";
-import { getCurrentBuyer } from "@/lib/buyer-session";
+import { toPublicProduct } from "@/lib/public-product";
+import { PRODUCT_INCLUDE } from "@/lib/variant-groups";
 import { CategorySections } from "./category-sections";
 
 export const dynamic = "force-dynamic";
@@ -23,19 +23,18 @@ export default async function CategoryPage({
 
   if (!category) notFound();
 
-  const typeId = (await getCurrentBuyer())?.customerType.id ?? null;
   const products = await prisma.product.findMany({
     where: { categories: { some: { id: category.id } } },
     // The admin's arrangement ("arrange products"); name breaks ties.
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-    include: shopProductInclude(typeId),
+    include: PRODUCT_INCLUDE,
   });
 
   return (
     <CategorySections
       categoryName={category.name}
       subcategories={category.subcategories}
-      products={products.map((p) => toPublicProduct(p, typeId))}
+      products={products.map((p) => toPublicProduct(p))}
     />
   );
 }

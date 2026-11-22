@@ -29,15 +29,9 @@ export function CategorySections({
   const {
     sortMode,
     setSortMode,
-    priceMin,
-    setPriceMin,
-    priceMax,
-    setPriceMax,
     inStockOnly,
     setInStockOnly,
     sorted,
-    hasActiveFilter,
-    clearFilters,
   } = useProductFilters(products);
 
   const sections = useMemo(() => {
@@ -223,14 +217,8 @@ export function CategorySections({
           <ProductFilterBar
             sortMode={sortMode}
             setSortMode={setSortMode}
-            priceMin={priceMin}
-            setPriceMin={setPriceMin}
-            priceMax={priceMax}
-            setPriceMax={setPriceMax}
             inStockOnly={inStockOnly}
             setInStockOnly={setInStockOnly}
-            hasActiveFilter={hasActiveFilter}
-            clearFilters={clearFilters}
           />
 
           {sections.length === 0 ? (

@@ -4,27 +4,25 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { PRODUCT_UNIT } from "@/lib/product-unit";
-import { shopProductInclude, toPublicProduct } from "@/lib/public-product";
-import { getCurrentBuyer } from "@/lib/buyer-session";
+import { toPublicProduct } from "@/lib/public-product";
 import { PRODUCT_INCLUDE } from "@/lib/variant-groups";
 
 export async function GET() {
-  // The admin gets everything, including each customer type's prices.
+  // The admin gets everything (prices, stock quantity).
   const session = await getServerSession(authOptions);
   if (session) {
     const products = await prisma.product.findMany({
       orderBy: { name: "asc" },
-      include: { ...PRODUCT_INCLUDE, typePrices: { select: { customerTypeId: true, price: true } } },
+      include: PRODUCT_INCLUDE,
     });
     return NextResponse.json(products);
   }
-  // Buyers: no stock quantity, and only their own type's prices (none for guests).
-  const typeId = (await getCurrentBuyer())?.customerType.id ?? null;
+  // Buyers: no prices and no stock quantity.
   const products = await prisma.product.findMany({
     orderBy: { name: "asc" },
-    include: shopProductInclude(typeId),
+    include: PRODUCT_INCLUDE,
   });
-  return NextResponse.json(products.map((p) => toPublicProduct(p, typeId)));
+  return NextResponse.json(products.map((p) => toPublicProduct(p)));
 }
 
 const createProductSchema = z

@@ -4,8 +4,6 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { PackageIcon } from "@/components/icons";
 import { useLocale } from "@/components/locale-provider";
 import { optimizedImage } from "@/lib/image-url";
-import { getEffectivePrice, getSalePercentOff } from "@/lib/effective-price";
-import { asProductUnit } from "@/lib/product-unit";
 import { useBuyer } from "@/components/buyer-context";
 
 export type Category = {
@@ -24,12 +22,9 @@ export type Product = {
   id: string;
   name: string;
   description: string | null;
-  /** Null for guests: prices are only sent to logged-in buyers. */
-  price: number | null;
   imageUrl: string | null;
   inStock: boolean;
   onSale: boolean;
-  salePrice: number | null;
   saleBannerImageUrl: string | null;
   categories: Category[];
   subcategory: Subcategory | null;
@@ -194,22 +189,6 @@ export function OptionPicker({
   );
 }
 
-/** "From ₪X" while no option is chosen and the options' prices differ. */
-function FromPrice({ options }: { options: Product[] }) {
-  const { t } = useLocale();
-  const prices = options.map(getEffectivePrice).filter((p): p is number => p != null);
-  if (prices.length === 0) return null; // a guest: no prices
-  const min = Math.min(...prices);
-  return (
-    <p className="text-sm font-bold text-[#1a1714] flex items-baseline gap-1 flex-wrap">
-      <span>{t("catalog.priceFrom", { price: min.toFixed(2) })}</span>
-      <span className="text-[#8a8177] font-medium text-[0.78em]">
-        / {t(`catalog.unitName.${asProductUnit(options[0].unit)}`)}
-      </span>
-    </p>
-  );
-}
-
 /**
  * A shop card for one product or for a card's options. With options, the
  * buyer picks one (buttons / dropdown) and the price, photo, stock and
@@ -250,14 +229,12 @@ export function ShopCard({
   const selected = options.find((o) => o.id === selectedId) ?? null;
   // Shown while nothing is chosen: the first option still available.
   const shown = selected ?? options.find((o) => o.inStock) ?? options[0];
-  const samePrice = new Set(options.map(getEffectivePrice)).size === 1;
   return (
     <ProductCard
       product={shown}
       title={options[0].variantGroup?.name}
       imageUrl={cardImage(options, selected)}
       photoCount={productPhotos(selected ?? options.find((o) => o.imageUrl) ?? shown).length}
-      price={!selected && !samePrice ? <FromPrice options={options} /> : undefined}
       picker={
         <OptionPicker
           options={options}
@@ -280,37 +257,6 @@ export function ShopCard({
   );
 }
 
-function PriceDisplay({ product, size = "sm" }: { product: Product; size?: "sm" | "lg" }) {
-  const { t } = useLocale();
-  // Guests: no price at all (the header's login button shows them).
-  if (product.price == null) return null;
-  const isOnSale = product.onSale && product.salePrice != null;
-  const priceClass = size === "lg" ? "text-xl font-bold" : "text-sm font-bold";
-  // "/ קרטון": what the price is for.
-  const per = (
-    <span className="text-[#8a8177] font-medium text-[0.78em]">
-      / {t(`catalog.unitName.${asProductUnit(product.unit)}`)}
-    </span>
-  );
-  if (!isOnSale) {
-    return (
-      <p className={`${priceClass} text-[#1a1714] flex items-baseline gap-1 flex-wrap`}>
-        <span>₪{product.price.toFixed(2)}</span>
-        {per}
-      </p>
-    );
-  }
-  return (
-    <p className={`${priceClass} flex items-baseline gap-1.5 flex-wrap`}>
-      <span className="text-[#b3402e]">₪{product.salePrice!.toFixed(2)}</span>
-      <span className="text-[#a39a8e] font-medium line-through text-[0.85em]">
-        ₪{product.price.toFixed(2)}
-      </span>
-      {per}
-    </p>
-  );
-}
-
 // The orders API accepts at most 10,000 of one product per order.
 const MAX_QUANTITY = 10000;
 const MAX_QUANTITY_DIGITS = String(MAX_QUANTITY).length;
@@ -329,7 +275,7 @@ export function AddToCartControl({
   size?: "sm" | "lg";
 }) {
   const { t } = useLocale();
-  const { openLogin } = useBuyer();
+  const { buyer, openLogin } = useBuyer();
   const [quantityInput, setQuantityInput] = useState(String(quantity));
 
   useEffect(() => {
@@ -358,8 +304,8 @@ export function AddToCartControl({
     );
   }
 
-  // Guests can't order (no prices): the cart button opens the login window.
-  if (product.price == null) onAdd = openLogin;
+  // Ordering needs the one-time sign-up: for a guest the cart button opens it.
+  if (!buyer) onAdd = openLogin;
 
   if (quantity === 0) {
     if (size === "lg") {
@@ -452,7 +398,6 @@ export function ProductCard({
   onExpand,
   title,
   imageUrl = product.imageUrl,
-  price,
   picker,
   photoCount = productPhotos(product).length,
 }: {
@@ -461,16 +406,14 @@ export function ProductCard({
   onAdd: () => void;
   onSetQuantity: (quantity: number) => void;
   onExpand: () => void;
-  /** Card with options (ShopCard): the card's name, photo, price and picker. */
+  /** Card with options (ShopCard): the card's name, photo and picker. */
   title?: string;
   imageUrl?: string | null;
-  price?: ReactNode;
   picker?: ReactNode;
   /** How many photos the details window has; 2+ shows a camera badge. */
   photoCount?: number;
 }) {
   const { t } = useLocale();
-  const percentOff = getSalePercentOff(product);
   // Out-of-stock cards fade their image and text but keep the "out of stock"
   // label at full strength, so it's the first thing a buyer reads.
   const fade = !product.inStock ? "opacity-[.55]" : "";
@@ -484,11 +427,6 @@ export function ProductCard({
         {!product.inStock && (
           <span className="absolute inset-x-0 top-1/2 -translate-y-1/2 z-20 mx-auto w-fit bg-[#1a1714]/85 text-white text-xs font-bold rounded-full px-3 py-1">
             {t("catalog.outOfStock")}
-          </span>
-        )}
-        {percentOff !== null && (
-          <span className="absolute top-1.5 start-1.5 z-10 bg-[#b3402e] text-white text-[10px] font-bold rounded-full px-1.5 py-0.5">
-            -{percentOff}%
           </span>
         )}
         {photoCount > 1 && (
@@ -517,7 +455,6 @@ export function ProductCard({
         <p className="text-xs font-medium text-[#2b2620] line-clamp-2 min-h-[33px] leading-tight">
           {title ?? product.name}
         </p>
-        {price ?? <PriceDisplay product={product} />}
         {picker}
 
         <div className="mt-auto flex items-center gap-1.5">
@@ -613,9 +550,6 @@ export function ProductDetailModal({
 
         <div className="p-[18px] pb-[22px]">
           <h2 className="text-lg font-bold text-[#1a1714] mb-1">{title}</h2>
-          <div className="mb-2">
-            <PriceDisplay product={product} size="lg" />
-          </div>
           {(product.categories.length > 0 || product.subcategory) && (
             <p className="text-xs text-[#8a8177] mb-2">
               {product.categories.map((category) => category.name).join(", ")}
