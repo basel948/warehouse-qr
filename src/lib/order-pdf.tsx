@@ -13,6 +13,16 @@ Font.register({
   ],
 });
 
+// Alef has no Arabic letters; react-pdf falls back to this font for them
+// (product and buyer names can be Arabic).
+Font.register({
+  family: "Noto Sans Arabic",
+  fonts: [
+    { src: path.join(process.cwd(), "src/assets/fonts/NotoSansArabic-Regular.ttf"), fontWeight: "normal" },
+    { src: path.join(process.cwd(), "src/assets/fonts/NotoSansArabic-Bold.ttf"), fontWeight: "bold" },
+  ],
+});
+
 export type OrderPdfItem = {
   productName: string;
   quantity: number;
@@ -43,7 +53,7 @@ export type OrderPdfData = {
 
 const styles = StyleSheet.create({
   page: {
-    fontFamily: "Alef",
+    fontFamily: ["Alef", "Noto Sans Arabic"],
     direction: "rtl",
     padding: 32,
     fontSize: 11,
